@@ -95,7 +95,24 @@ export function CapturePanel({ examples }: Props) {
                     <div className="font-medium">
                       Note saved — but the AI couldn't process it yet.
                     </div>
-                    {state.data.pending.suspectedNetworkBlock ? (
+                    {state.data.pending.kind === "db_unreachable" ? (
+                      <div className="space-y-1.5 text-muted-foreground">
+                        <div>
+                          The database (Neon Postgres) was unreachable for a
+                          moment. This is almost always a transient WiFi or
+                          DNS hiccup, not something wrong with your setup.
+                        </div>
+                        <div>Just click <span className="font-medium text-foreground">Capture</span> again in a few seconds.</div>
+                        <details className="mt-1">
+                          <summary className="cursor-pointer text-xs">
+                            Technical details
+                          </summary>
+                          <pre className="mt-1 max-h-32 overflow-auto rounded bg-muted p-2 text-[11px] leading-snug">
+                            {state.data.pending.reason.slice(0, 500)}
+                          </pre>
+                        </details>
+                      </div>
+                    ) : state.data.pending.suspectedNetworkBlock ? (
                       <div className="space-y-1.5 text-muted-foreground">
                         <div>
                           Looks like your network is blocking{" "}
@@ -133,10 +150,22 @@ export function CapturePanel({ examples }: Props) {
                         </ul>
                       </div>
                     ) : (
-                      <div className="text-muted-foreground">
-                        {state.data.pending.reason
-                          .split("\n")[0]
-                          .slice(0, 200)}
+                      <div className="space-y-1.5 text-muted-foreground">
+                        <div>
+                          The AI extraction failed for this note. Click{" "}
+                          <span className="font-medium text-foreground">
+                            Capture
+                          </span>{" "}
+                          again to retry.
+                        </div>
+                        <details className="mt-1">
+                          <summary className="cursor-pointer text-xs">
+                            Technical details
+                          </summary>
+                          <pre className="mt-1 max-h-32 overflow-auto rounded bg-muted p-2 text-[11px] leading-snug">
+                            {state.data.pending.reason.slice(0, 500)}
+                          </pre>
+                        </details>
                       </div>
                     )}
                   </div>

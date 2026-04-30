@@ -136,13 +136,22 @@ export interface IngestResult {
   relationships_added: number;
   relationships_reinforced: number;
   /**
-   * If extraction couldn't run (e.g. LLM unreachable), the raw note is still
-   * persisted but processing is deferred. UI surfaces this so the user can
-   * retry.
+   * If extraction couldn't run, the raw note is still persisted but
+   * processing is deferred. UI surfaces this so the user can retry.
    */
   pending?: {
     reason: string;
-    /** True when we suspect a corporate proxy / VPN block, not a real outage. */
+    /**
+     * What sub-step actually failed. Lets the UI tailor its hint:
+     *   - "db_unreachable": Postgres (Neon) couldn't be reached at all.
+     *     Almost always a transient DNS / WiFi hiccup, not a config issue.
+     *   - "llm_failed": Postgres worked, but the Groq call failed. May be
+     *     a real outage, a moderation refusal, or a network block — see
+     *     `suspectedNetworkBlock`.
+     */
+    kind: "db_unreachable" | "llm_failed";
+    /** True when we suspect a corporate proxy / VPN block, not a real outage.
+     *  Only meaningful when `kind === "llm_failed"`. */
     suspectedNetworkBlock: boolean;
   };
 }

@@ -114,29 +114,63 @@ export async function ingestNote(
 
   const note = await createNote(userId, trimmed);
 
-  let payload: ExtractionPayload;
+  // Two distinct network calls: one to Neon (listPeople), one to Groq
+  // (extractFromNote). Catching them in one try/catch made an earlier
+  // version of this code blame Groq for transient Neon DNS failures —
+  // the heuristic saw "ENOTFOUND" and incorrectly suggested setting
+  // HTTPS_PROXY for api.groq.com. Now we know which one failed and can
+  // give an accurate hint.
+  let known: Awaited<ReturnType<typeof listPeople>>;
   try {
-    const known = await listPeople(userId);
-    payload = await extractFromNote(trimmed, known);
+    known = await listPeople(userId);
   } catch (err) {
-    // Don't throw: the note IS saved, we just couldn't process it. Surface
-    // a `pending` result so the UI can show "saved, retry needed" instead
-    // of losing the user's input.
     const reason = (err as Error).message ?? String(err);
-    const suspectedNetworkBlock =
-      /All Groq models failed/i.test(reason) &&
-      /Connection error|fetch failed|ENOTFOUND|EAI_AGAIN|urlblock|blockpage|policy|denied|captive/i.test(
-        reason,
-      );
     console.warn(
-      `[ingest] LLM extraction failed for note ${note.id}; saving as pending.`,
+      `[ingest] DB unreachable while loading known people for note ${note.id}: ${reason}`,
     );
     return {
       note_id: note.id,
       people: [],
       relationships_added: 0,
       relationships_reinforced: 0,
-      pending: { reason, suspectedNetworkBlock },
+      pending: {
+        reason,
+        kind: "db_unreachable",
+        suspectedNetworkBlock: false,
+      },
+    };
+  }
+
+  let payload: ExtractionPayload;
+  try {
+    payload = await extractFromNote(trimmed, known);
+  } catch (err) {
+    // Don't throw: the note IS saved, we just couldn't process it. Surface
+    // a `pending` result so the UI can show "saved, retry needed" instead
+    // of losing the user's input.
+    const reason = (err as Error).message ?? String(err);
+    // Only suspect a Groq-specific network block when the error pattern
+    // really looks like one. The "All Groq models failed" prefix is added
+    // by chat() exclusively, so any DNS / fetch error inside this block
+    // is unambiguously about reaching api.groq.com (or its mirror).
+    const suspectedNetworkBlock =
+      /All Groq models failed/i.test(reason) &&
+      /Connection error|fetch failed|ENOTFOUND|EAI_AGAIN|urlblock|blockpage|policy|denied|captive/i.test(
+        reason,
+      );
+    console.warn(
+      `[ingest] LLM extraction failed for note ${note.id}; saving as pending. Reason:\n${reason}`,
+    );
+    return {
+      note_id: note.id,
+      people: [],
+      relationships_added: 0,
+      relationships_reinforced: 0,
+      pending: {
+        reason,
+        kind: "llm_failed",
+        suspectedNetworkBlock,
+      },
     };
   }
 
