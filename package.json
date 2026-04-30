@@ -1,0 +1,36 @@
+{
+  "name": "secondbrain",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A personal People Knowledge Graph — your second brain for the people in your life.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "lint": "next lint",
+    "db:migrate": "tsx scripts/migrate.ts"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
+    "groq-sdk": "^0.9.1",
+    "nanoid": "^5.0.7",
+    "next": "^16.2.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-force-graph-2d": "^1.27.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.4",
+    "@types/node": "^22.7.5",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "dotenv": "^16.4.5",
+    "eslint": "^9.13.0",
+    "eslint-config-next": "^16.2.4",
+    "tailwindcss": "^4.2.4",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3"
+  }
+}
