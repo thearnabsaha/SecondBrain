@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import type { GraphEdge, GraphNode } from "@/lib/services/graphService";
 
 interface Props {
@@ -39,9 +40,8 @@ type ForceGraphComponent = ComponentType<{
 }>;
 
 /**
- * `react-force-graph-2d` is browser-only and pulls in canvas/threejs
- * dependencies that don't bundle on the server. We load it imperatively in
- * an effect so it never appears in the server graph.
+ * react-force-graph-2d is browser-only. Imported imperatively so it never
+ * appears in the server bundle.
  */
 export function GraphCanvas({ nodes, edges }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -90,7 +90,7 @@ export function GraphCanvas({ nodes, edges }: Props) {
             })),
           }}
           backgroundColor="rgba(0,0,0,0)"
-          linkColor={() => "rgba(124, 92, 255, 0.45)"}
+          linkColor={() => "rgba(255,255,255,0.18)"}
           linkWidth={(l) => l.weight}
           cooldownTicks={120}
           onNodeClick={(node) => router.push(`/people/${node.id}`)}
@@ -100,12 +100,9 @@ export function GraphCanvas({ nodes, edges }: Props) {
             const x = node.x ?? 0;
             const y = node.y ?? 0;
 
-            const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
-            grad.addColorStop(0, "#a487ff");
-            grad.addColorStop(1, "#5a3ce0");
             ctx.beginPath();
             ctx.arc(x, y, r, 0, 2 * Math.PI);
-            ctx.fillStyle = grad;
+            ctx.fillStyle = "#7c5cff";
             ctx.fill();
             ctx.lineWidth = 1.5;
             ctx.strokeStyle = "rgba(255,255,255,0.25)";
@@ -121,8 +118,8 @@ export function GraphCanvas({ nodes, edges }: Props) {
           }}
         />
       ) : (
-        <div className="flex h-full items-center justify-center text-[var(--color-text-dim)]">
-          <span className="spinner" /> Loading graph…
+        <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading graph…
         </div>
       )}
     </div>

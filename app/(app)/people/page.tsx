@@ -2,7 +2,10 @@ import Link from "next/link";
 import { ensureSchema } from "@/lib/db";
 import { hasPostgres } from "@/lib/config";
 import { listPeople } from "@/lib/repos/peopleRepo";
-import { PeopleFilter } from "../_components/PeopleFilter";
+import { requireUser } from "@/lib/auth/current-user";
+import { PeopleFilter } from "../../_components/PeopleFilter";
+import { buttonVariants } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 
 export const dynamic = "force-dynamic";
 
@@ -17,18 +20,17 @@ export default async function PeoplePage() {
   }
 
   await ensureSchema();
-  const people = await listPeople();
+  const user = await requireUser();
+  const people = await listPeople(user.id);
 
   return (
     <>
-      <div className="mb-7 flex items-end justify-between gap-4">
-        <div>
-          <h1 className="m-0 text-[26px] font-bold tracking-tight">People</h1>
-          <p className="mt-1 text-[13px] text-[var(--color-text-dim)]">
-            {people.length} {people.length === 1 ? "person" : "people"} in your
-            graph
-          </p>
-        </div>
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight">People</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {people.length} {people.length === 1 ? "person" : "people"} in your
+          graph
+        </p>
       </div>
 
       {people.length === 0 ? (
@@ -36,11 +38,7 @@ export default async function PeoplePage() {
           title="No people yet"
           body="Capture your first note to start building your graph."
           cta={
-            <Link
-              href="/"
-              className="btn btn-primary"
-              style={{ marginTop: 12, display: "inline-flex" }}
-            >
+            <Link href="/" className={buttonVariants({ className: "mt-4" })}>
               Capture a note
             </Link>
           }
@@ -68,10 +66,12 @@ function EmptyState({
   cta?: React.ReactNode;
 }) {
   return (
-    <div className="card text-center" style={{ padding: "40px 20px" }}>
-      <h3 className="m-0 mb-2 text-[var(--color-text)]">{title}</h3>
-      <p className="m-0 text-[var(--color-text-dim)]">{body}</p>
-      {cta}
-    </div>
+    <Card>
+      <CardContent className="flex flex-col items-center py-16 text-center">
+        <h3 className="text-lg font-medium">{title}</h3>
+        <p className="mt-2 max-w-md text-sm text-muted-foreground">{body}</p>
+        {cta}
+      </CardContent>
+    </Card>
   );
 }

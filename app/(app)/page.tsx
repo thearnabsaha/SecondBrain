@@ -1,4 +1,4 @@
-import { CapturePanel } from "./_components/CapturePanel";
+import { CapturePanel } from "../_components/CapturePanel";
 
 const examples = [
   "Met Aarav at the gym today. He works at TCS, doesn't smoke, and seems super disciplined about his routine. Mentioned his girlfriend Maya is a doctor.",
@@ -10,14 +10,12 @@ const examples = [
 export default function CapturePage() {
   return (
     <>
-      <div className="mb-7 flex items-end justify-between gap-4">
-        <div>
-          <h1 className="m-0 text-[26px] font-bold tracking-tight">Capture</h1>
-          <p className="mt-1 text-[13px] text-[var(--color-text-dim)]">
-            Drop in messy notes about people you know. The system will extract,
-            connect, and remember.
-          </p>
-        </div>
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight">Capture</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Drop in messy notes about people you know. The system will extract,
+          connect, and remember.
+        </p>
       </div>
 
       <CapturePanel examples={examples} />

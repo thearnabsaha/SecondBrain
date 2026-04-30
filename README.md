@@ -5,20 +5,22 @@ Drop in messy natural-language notes; SecondBrain extracts the people, their att
 
 > Capture → Interpret → Connect → Update → Summarize → Retrieve
 
-A single **Next.js** app — server components fetch data straight from Postgres, mutations run via server actions, no separate backend.
-Designed to deploy to **Vercel** in one click, with **Neon Postgres** as the database, **Groq** as the LLM, and **Tavily** for web enrichment.
+A single **Next.js 16** app — server components fetch data straight from Postgres, mutations run via server actions, no separate backend.
+Built with **shadcn/ui**, **Tailwind v4**, **Neon Postgres**, **Groq**, and **Tavily**. Email/password authentication is built in; every user gets a fully isolated graph.
 
 ---
 
 ## Features
 
+- **Email + password auth** with bcrypt-hashed passwords and JWT session cookies. Routes are gated by an edge proxy.
+- **Per-user isolation** — every person, attribute, relationship, and note is scoped to the signed-in user. Two users can have a "John" who don't bleed into each other.
 - **Capture** any messy note. Groq extracts people, attributes, and relationships in a single round-trip.
 - **Fuzzy entity resolution** — never creates duplicate people for "John", "John Carter", or nicknames.
 - **Evolving profiles** with auto-regenerated, human-feeling summaries per person.
 - **Confidence tracking** on every fact (1.0 = stated, 0.4 = inferred, etc.).
-- **Contradiction handling** — when new info conflicts with old, the older fact is **superseded, not deleted** (kept as history).
+- **Contradiction handling** — when new info conflicts with old, the older fact is **superseded, not deleted**.
 - **Reinforcement** — repeating an existing fact bumps confidence; repeating a relationship strengthens it.
-- **Hybrid search** across names, aliases, attributes, and raw note text — driven by URL search params so it's shareable.
+- **Hybrid search** across names, aliases, attributes, and raw note text.
 - **Natural-language Q&A** over your graph: *"Who works at TCS?"*, *"Who is Aarav dating?"*
 - **Web enrichment** with Tavily — pull public info about a person's company / school / role and merge it as low-confidence attributes.
 - **Interactive force-directed graph** of everyone you know.
@@ -28,13 +30,14 @@ Designed to deploy to **Vercel** in one click, with **Neon Postgres** as the dat
 
 ## Tech stack
 
-- **Framework**: Next.js 16 (App Router) + React 19 + TypeScript
-- **Styling**: Tailwind CSS v4 (CSS-first config) with a custom dark design system
-- **Database**: Postgres via [`@neondatabase/serverless`](https://www.npmjs.com/package/@neondatabase/serverless) — works on Vercel/Neon native, standalone Neon, Supabase, or any Postgres connection string
-- **LLM**: Groq (default model: `llama-3.3-70b-versatile`)
+- **Next.js 16** (App Router) + **React 19** + **TypeScript**
+- **shadcn/ui** with Base UI primitives, **Tailwind CSS v4** (CSS-first config), flat dark theme — no gradients
+- **Postgres** via [`@neondatabase/serverless`](https://www.npmjs.com/package/@neondatabase/serverless) — Neon recommended
+- **Auth**: bcryptjs (password hashing) + jose (JWT signing, edge-compatible for proxy)
+- **LLM**: Groq (`llama-3.3-70b-versatile` by default)
 - **Web search**: Tavily
-- **Validation**: Zod (LLM JSON output)
 - **Visualization**: react-force-graph-2d
+- **Validation**: Zod for LLM output
 
 ---
 
@@ -42,32 +45,42 @@ Designed to deploy to **Vercel** in one click, with **Neon Postgres** as the dat
 
 ```
 SecondBrain/
-├── app/                              <- Next.js App Router
-│   ├── layout.tsx                    Root layout: sidebar + theme + banners
-│   ├── globals.css                   Tailwind v4 + custom dark theme
-│   ├── page.tsx                      / (Capture)
-│   ├── actions.ts                    All server actions (ingest, enrich, ask, mutations)
-│   ├── people/
-│   │   ├── page.tsx                  /people  (server component)
-│   │   └── [id]/
-│   │       ├── page.tsx              /people/:id (server component)
-│   │       └── not-found.tsx
-│   ├── search/page.tsx               /search?q=…
-│   ├── ask/page.tsx                  /ask
-│   ├── graph/page.tsx                /graph
-│   └── _components/                  client islands (forms, interactive widgets)
-├── components/                       shared components (Sidebar, Avatar, banners)
-├── lib/                              backend logic — pure TS, framework-agnostic
+├── app/
+│   ├── layout.tsx                    Root layout (font + Toaster only)
+│   ├── globals.css                   Tailwind v4 + flat dark theme
+│   ├── actions.ts                    Server actions (ingest, enrich, ask, mutations)
+│   ├── auth-actions.ts               Auth actions (signin, signup, signout)
+│   ├── (auth)/                       Public auth routes
+│   │   ├── layout.tsx                Bare auth shell
+│   │   ├── signin/page.tsx
+│   │   └── signup/page.tsx
+│   ├── (app)/                        Authenticated routes (sidebar shell)
+│   │   ├── layout.tsx                requireUser() + Sidebar
+│   │   ├── page.tsx                  / — Capture
+│   │   ├── people/page.tsx
+│   │   ├── people/[id]/page.tsx
+│   │   ├── search/page.tsx
+│   │   ├── ask/page.tsx
+│   │   └── graph/page.tsx
+│   └── _components/                  client islands
+├── components/
+│   ├── Sidebar.tsx                   Nav + user dropdown w/ sign-out
+│   ├── Avatar.tsx                    flat-color initials avatar
+│   ├── HealthBanners.tsx             config warnings
+│   └── ui/                           shadcn primitives
+├── lib/
+│   ├── auth/                         password hashing + JWT sessions + getCurrentUser
 │   ├── config.ts                     env config
 │   ├── types.ts                      domain types
-│   ├── db/                           Postgres connection + schema migration
+│   ├── db/                           Postgres client + schema migration
 │   ├── llm/                          Groq, Tavily, extract / summarize / qa / enrich
-│   ├── repos/                        DB access (one file per table)
+│   ├── repos/                        DB access (every fn takes userId)
 │   ├── services/                     ingest, search, graph, qa, enrich pipelines
-│   └── utils/names.ts                normalization + fuzzy match
-├── scripts/migrate.ts                manual schema migrate (rarely needed)
-├── .env.local                        your secrets (gitignored)
-├── .env.example                      template
+│   ├── utils.ts                      shadcn `cn()` helper
+│   └── utils/names.ts                fuzzy name match
+├── proxy.ts                          edge proxy — gates all routes behind session
+├── scripts/migrate.ts                explicit schema migration script
+├── components.json                   shadcn config
 ├── next.config.ts
 ├── postcss.config.mjs
 ├── tsconfig.json
@@ -77,14 +90,14 @@ SecondBrain/
 
 ---
 
-## 1. Local development
+## Local development
 
 ### Prerequisites
 
 - Node.js 18+
-- A Groq API key — [console.groq.com](https://console.groq.com)
-- A Tavily API key (optional but recommended) — [app.tavily.com](https://app.tavily.com)
-- A Postgres database. Fastest path: a free Neon project — [neon.tech](https://neon.tech).
+- A **Groq** API key — [console.groq.com](https://console.groq.com)
+- A **Tavily** API key (optional but recommended) — [app.tavily.com](https://app.tavily.com)
+- A **Neon** Postgres database — [neon.tech](https://neon.tech) (free tier is plenty)
 
 ### Setup
 
@@ -102,7 +115,24 @@ GROQ_MODEL=llama-3.3-70b-versatile                           # optional
 
 TAVILY_API_KEY=tvly-...                                      # optional, enables enrichment
 
-POSTGRES_URL=postgres://user:pass@host/dbname?sslmode=require  # required
+POSTGRES_URL=postgresql://user:pass@host/db?sslmode=require  # required
+AUTH_SECRET=<at least 32 chars>                              # required
+```
+
+Generate an `AUTH_SECRET`:
+
+```bash
+# macOS / Linux:
+openssl rand -base64 48
+
+# PowerShell:
+[Convert]::ToBase64String((1..48 | ForEach-Object { [byte](Get-Random -Maximum 256) }))
+```
+
+### Apply the schema (optional — done automatically on first request)
+
+```bash
+npm run db:migrate
 ```
 
 ### Run it
@@ -111,121 +141,138 @@ POSTGRES_URL=postgres://user:pass@host/dbname?sslmode=require  # required
 npm run dev
 ```
 
-Open <http://localhost:3000>. The schema is created lazily on the first request that needs it.
+Open <http://localhost:3000>. You'll be redirected to **/signin** — create an account at **/signup**.
 
 ---
 
-## 2. Deploy to Vercel
+## Deploying to Vercel — step by step
 
-### Option A — One-click via the Vercel dashboard
+### 1. Push to GitHub
 
-1. **Push this repo to GitHub.**
-2. Go to [vercel.com/new](https://vercel.com/new) and import the repo.
-3. **Connect a Postgres database** — in the project's Storage tab, click *Connect Database* and pick **Neon** (Vercel-managed).
-   This automatically populates `POSTGRES_URL` and aliases (`DATABASE_URL`, `POSTGRES_PRISMA_URL`) into your project env.
-4. In *Settings → Environment Variables*, add:
-   - `GROQ_API_KEY` — your Groq key
-   - `TAVILY_API_KEY` — your Tavily key (optional)
-   - `GROQ_MODEL` — optional override
-5. Click **Deploy**. Done.
-
-Next.js is auto-detected — no `vercel.json` is needed.
-
-### Option B — From the CLI
+If you haven't yet:
 
 ```bash
-npm i -g vercel
-vercel login
-vercel link
-vercel env add GROQ_API_KEY     # paste, choose all envs
-vercel env add TAVILY_API_KEY   # optional
-# Connect a Postgres store from the Vercel dashboard, then:
-vercel env pull .env.local      # pulls POSTGRES_URL etc. locally
-vercel deploy --prod
+git add .
+git commit -m "feat: shadcn UI, neon db, auth"
+git push
 ```
+
+### 2. Import the repo into Vercel
+
+- Go to [vercel.com/new](https://vercel.com/new).
+- Click **"Import Git Repository"** and pick your repo.
+- Vercel auto-detects **Next.js** — leave all build settings on defaults (don't override the build command or output directory).
+
+### 3. Connect your Neon database
+
+You have two options.
+
+**Option A: Use the existing Neon project (this one).**
+
+1. Open the imported project in Vercel.
+2. Click **Settings → Environment Variables**.
+3. Add `POSTGRES_URL` with your Neon connection string:
+   ```
+   postgresql://neondb_owner:npg_mZB1SRh8Just@ep-curly-mode-amjv48wt-pooler.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+   ```
+
+**Option B: Connect a new Vercel-managed Neon store.**
+
+1. In your Vercel project, click **Storage → Connect Database**.
+2. Pick **Neon** under Marketplace.
+3. Vercel automatically populates `POSTGRES_URL`, `DATABASE_URL`, and friends in your project env.
+
+### 4. Add the rest of the environment variables
+
+In **Settings → Environment Variables**, add (set scope to **Production**, **Preview**, and **Development**):
+
+| Key              | Value                                                              |
+| ---------------- | ------------------------------------------------------------------ |
+| `GROQ_API_KEY`   | `gsk_...` (your Groq key)                                          |
+| `GROQ_MODEL`     | `llama-3.3-70b-versatile` (optional)                               |
+| `TAVILY_API_KEY` | `tvly-...` (optional)                                              |
+| `AUTH_SECRET`    | a 48-byte base64 string — **must be different from your dev one**  |
+
+Generate a fresh `AUTH_SECRET` for production. **Never** reuse the dev one.
+
+### 5. Deploy
+
+Click **Deploy**. Vercel runs `next build`, which:
+
+- compiles every route (including the `proxy.ts` edge function),
+- skips connecting to Postgres at build time (lazy on first request).
+
+You'll get a URL like `https://secondbrain.vercel.app`.
+
+### 6. First sign-up
+
+Visit your deployed URL → it redirects to `/signin` → click **"Create one"** → fill in email + password (≥ 8 chars). The schema is created automatically on this first request.
+
+### Troubleshooting
+
+- **"AUTH_SECRET is not set or is too short"** → add `AUTH_SECRET` (≥ 32 chars) in Settings → Environment Variables, then **Redeploy** the latest commit.
+- **"POSTGRES_URL is not configured"** → connect a Neon store or paste the URL into env vars.
+- **Sign-in fails immediately** → in Vercel logs, look for a Postgres connect error. Confirm the connection string includes `?sslmode=require`.
 
 ---
 
 ## How ingestion works
 
 ```
-note text  ──────────────────────────────────► server action `ingestAction`
-                                                       │
-                                                       ▼
-                              [ Capture ]    save raw note to Postgres
-                                                       │
-                                                       ▼
-                              [ Interpret ] Groq returns strict JSON:
-                                                       │  - people: [{ name, aliases, attributes }]
-                                                       │  - relationships: [{ from, to, type, label, confidence }]
-                                                       ▼
-                              [ Connect ]   fuzzy-match each name against existing people
-                                                       │  (normalized name → alias table → Levenshtein fallback)
-                                                       ▼
-                              [ Update ]    upsert attributes (preserving history on conflicts)
-                                                       │  upsert relationships (reinforce or create both directions)
-                                                       │  record note → person mentions for the timeline
-                                                       ▼
-                              [ Summarize ] regenerate the per-person profile summary
-                                                       │
-                                                       ▼
-                              [ Retrieve ]  pages re-fetch via `revalidatePath`
+note text → ingestAction (server action, requireUser)
+                │
+                ▼
+     [ Capture ]    save raw note (with user_id) to Postgres
+                │
+                ▼
+     [ Interpret ] Groq returns strict JSON
+                │  - people: [{ name, aliases, attributes }]
+                │  - relationships: [{ from, to, type, label, confidence }]
+                ▼
+     [ Connect ]   fuzzy-match each name against the user's existing people
+                │  (normalized name → alias table → Levenshtein fallback)
+                ▼
+     [ Update ]    upsert attributes (preserving history on conflicts)
+                │  upsert relationships (reinforce or create both directions)
+                │  record note → person mentions for the timeline
+                ▼
+     [ Summarize ] regenerate the per-person profile summary
+                ▼
+     [ Retrieve ]  pages re-fetch via revalidatePath
 ```
-
-## Web enrichment (Tavily)
-
-On any profile page, click **Enrich** to:
-
-1. Generate a search query from the person's professional attributes (e.g. `"Software Engineer at TCS"`).
-2. Send it to Tavily for top web snippets.
-3. Have Groq propose new attributes grounded in those snippets — only public, factual things tied to the company / school / role.
-4. Merge them as **low-confidence** attributes (0.3–0.7) so they don't override anything you wrote yourself.
-5. Regenerate the summary.
-
-You can also pass a **custom query** (e.g. just `"TCS"` or `"AIIMS Delhi"`) for finer control.
 
 ## Data model
 
 ```
-people          ── the nodes
-person_aliases  ── known alternative names ("Aar", "Aarav K")
-attributes      ── { person, category, key, value, confidence, source_note }
-                   (older values are superseded_by → newer rows; never deleted)
-relationships   ── directed edges with type, label, confidence, reinforcement_count
-notes           ── every raw note submitted
-note_mentions   ── links notes to the people they mention (powers timelines)
+users           ── owners
+people          ── nodes (scoped to a user)
+person_aliases  ── alternative names per person (scoped to a user)
+attributes      ── { user, person, category, key, value, confidence, source_note }
+                   older values are superseded_by → newer rows; never deleted
+relationships   ── directed edges with type/label/reinforcement_count, scoped to a user
+notes           ── raw input notes, scoped to a user
+note_mentions   ── links notes to the people they mention
 summaries       ── cached LLM summary per person
 ```
 
----
-
-## Architecture notes
-
-- **Server components fetch directly from Postgres** for initial render — no client-side `fetch` for the home, people, profile, search, or graph pages. The HTML you see is the real data, hydrated only where interactivity is needed.
-- **Mutations go through server actions** in `app/actions.ts`. They use Next's `revalidatePath` so the affected pages refresh instantly without manual cache busting.
-- **Client islands** live in `app/_components/`: the capture form (`useActionState`), the search input (debounced URL push), the enrich panel (`useActionState`), the ask panel, and the graph canvas.
-- **`react-force-graph-2d`** is loaded on mount with a plain `import()` inside `useEffect` — Turbopack keeps it out of any server bundle that way.
-- **Schema migrations** run lazily on the first request that hits the DB (`ensureSchema()`); idempotent and safe to ship as-is. You can also run `npm run db:migrate` explicitly.
+Every owned table has `user_id REFERENCES users(id) ON DELETE CASCADE`, so deleting a user removes their entire graph.
 
 ---
 
 ## Where your data lives
 
-In your Postgres database (Vercel-managed Neon, your own Neon, Supabase, etc.).
-
-To wipe everything and start fresh:
+In your Neon Postgres database. Wipe everything and start fresh with:
 
 ```sql
-DROP TABLE IF EXISTS summaries, note_mentions, attributes, relationships, notes, person_aliases, people CASCADE;
+DROP TABLE IF EXISTS summaries, note_mentions, attributes, relationships, notes, person_aliases, people, users CASCADE;
 ```
 
 ---
 
 ## Roadmap ideas
 
-- Full-text search via Postgres `tsvector` for faster note search at scale.
+- Google OAuth in addition to email/password.
+- Full-text search via Postgres `tsvector`.
 - Embedding-based semantic search with `pgvector`.
 - Bulk import from messages / journals.
 - Weekly digest: "Who haven't you talked about in a while?"
-- Export to Obsidian / JSON.
-- Browser extension to capture notes from anywhere.

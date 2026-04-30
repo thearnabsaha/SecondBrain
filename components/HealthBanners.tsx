@@ -1,8 +1,9 @@
+import { AlertCircle, AlertTriangle } from "lucide-react";
 import { hasGroq, hasPostgres, hasTavily } from "@/lib/config";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 /**
- * Server component. Renders nothing if everything is configured. Otherwise
- * surfaces clear, actionable banners so the user knows what to fix.
+ * Server component. Renders nothing if everything is configured.
  */
 export function HealthBanners() {
   const groq = hasGroq();
@@ -11,26 +12,37 @@ export function HealthBanners() {
   if (groq && tavily && postgres) return null;
 
   return (
-    <div className="mb-4 flex flex-col gap-2">
+    <div className="mb-6 space-y-2">
       {!postgres && (
-        <div className="error-banner">
-          <strong>Postgres is not configured.</strong> Set{" "}
-          <code>POSTGRES_URL</code> in <code>.env.local</code> (or in your
-          Vercel project env). Nothing will be saved until this is set up.
-        </div>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Postgres is not configured</AlertTitle>
+          <AlertDescription>
+            Set <code>POSTGRES_URL</code> in <code>.env.local</code> (or in
+            your Vercel project env). Nothing will be saved until this is set
+            up.
+          </AlertDescription>
+        </Alert>
       )}
       {!groq && (
-        <div className="warning-banner">
-          <strong>GROQ_API_KEY is not set.</strong> Note ingestion and Q&A will
-          not work. Add it in <code>.env.local</code>.
-        </div>
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>GROQ_API_KEY is not set</AlertTitle>
+          <AlertDescription>
+            Note ingestion and Q&amp;A will not work. Add it in{" "}
+            <code>.env.local</code>.
+          </AlertDescription>
+        </Alert>
       )}
       {groq && !tavily && (
-        <div className="warning-banner">
-          <strong>TAVILY_API_KEY is not set.</strong> The web-enrichment
-          feature on profile pages will not work, but everything else is fully
-          functional.
-        </div>
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>TAVILY_API_KEY is not set</AlertTitle>
+          <AlertDescription>
+            The web-enrichment feature on profile pages will not work, but
+            everything else is fully functional.
+          </AlertDescription>
+        </Alert>
       )}
     </div>
   );

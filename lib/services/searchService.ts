@@ -20,10 +20,10 @@ export interface PersonSearchHit {
   score: number;
 }
 
-/**
- * Hybrid search across names, aliases, attributes, and notes.
- */
-export async function searchPeople(query: string): Promise<PersonSearchHit[]> {
+export async function searchPeople(
+  userId: string,
+  query: string,
+): Promise<PersonSearchHit[]> {
   const q = query.trim();
   if (!q) return [];
 
@@ -38,18 +38,18 @@ export async function searchPeople(query: string): Promise<PersonSearchHit[]> {
     }
   };
 
-  const direct = await findPersonByName(q);
+  const direct = await findPersonByName(userId, q);
   if (direct) bump(direct, `name match: ${direct.name}`, 10);
 
-  const all = await listPeople();
+  const all = await listPeople(userId);
   for (const p of all) {
     if (p.id === direct?.id) continue;
     if (namesMatch(q, p.name)) bump(p, `name match: ${p.name}`, 6);
   }
 
-  const attrHits = await searchAttributes(q);
+  const attrHits = await searchAttributes(userId, q);
   for (const a of attrHits) {
-    const p = await getPersonById(a.person_id);
+    const p = await getPersonById(userId, a.person_id);
     if (!p) continue;
     bump(
       p,
@@ -58,11 +58,11 @@ export async function searchPeople(query: string): Promise<PersonSearchHit[]> {
     );
   }
 
-  const noteHits = await searchNotes(q);
+  const noteHits = await searchNotes(userId, q);
   for (const n of noteHits) {
-    const mentions = await getMentionsForNote(n.id);
+    const mentions = await getMentionsForNote(userId, n.id);
     for (const m of mentions) {
-      const p = await getPersonById(m.person_id);
+      const p = await getPersonById(userId, m.person_id);
       if (p) bump(p, `mentioned in note: "${truncate(n.content, 60)}"`, 1);
     }
   }
@@ -74,9 +74,9 @@ function truncate(s: string, n: number): string {
   return s.length <= n ? s : s.slice(0, n - 1) + "…";
 }
 
-export async function getPersonProfile(personId: string) {
-  const person = await getPersonById(personId);
+export async function getPersonProfile(userId: string, personId: string) {
+  const person = await getPersonById(userId, personId);
   if (!person) return null;
-  const attributes = await getActiveAttributes(personId);
+  const attributes = await getActiveAttributes(userId, personId);
   return { person, attributes };
 }

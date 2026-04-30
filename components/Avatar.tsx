@@ -5,20 +5,21 @@ interface AvatarProps {
 }
 
 /**
- * Deterministic gradient avatar with the person's initials.
- * Pure component, server-safe.
+ * Flat-color avatar with the person's initials. Hue is derived
+ * deterministically from the name. No gradients.
  */
-export function Avatar({ name, className = "", size }: AvatarProps) {
+export function Avatar({ name, className = "", size = 40 }: AvatarProps) {
   const initials = getInitials(name);
   const hue = hashHue(name);
   const style: React.CSSProperties = {
-    background: `linear-gradient(135deg, hsl(${hue}, 75%, 60%), hsl(${(hue + 60) % 360}, 80%, 55%))`,
-    ...(size
-      ? { width: size, height: size, fontSize: size * 0.36, borderRadius: size * 0.25 }
-      : null),
+    width: size,
+    height: size,
+    fontSize: Math.round(size * 0.36),
+    borderRadius: Math.round(size * 0.25),
+    backgroundColor: `hsl(${hue}, 55%, 42%)`,
   };
   return (
-    <div className={`avatar ${className}`} style={style} title={name}>
+    <div className={`avatar-initials ${className}`} style={style} title={name}>
       {initials}
     </div>
   );

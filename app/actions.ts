@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { ensureSchema } from "@/lib/db";
+import { requireUser } from "@/lib/auth/current-user";
 import { ingestNote } from "@/lib/services/ingestService";
 import { enrichPersonById } from "@/lib/services/enrichService";
 import { ask as askGraph } from "@/lib/services/qaService";
@@ -15,15 +16,8 @@ import { deleteRelationship as deleteRelationshipRepo } from "@/lib/repos/relati
 import type { IngestResult } from "@/lib/types";
 
 /**
- * Server actions module.
- *
- * Every action:
- * - boots/migrates the schema lazily
- * - performs the mutation against Postgres
- * - revalidates whichever pages need a refresh
- *
- * Actions return plain JSON so they can be invoked from client forms via
- * `useFormState` or directly from `<form action={...}>`.
+ * Server actions module. Every action requires a signed-in user, mutates
+ * Postgres, and revalidates the right paths.
  */
 
 export type IngestActionResult =
@@ -38,7 +32,8 @@ export async function ingestAction(
   if (!content) return { ok: false, error: "Note content is empty." };
   try {
     await ensureSchema();
-    const result = await ingestNote(content);
+    const user = await requireUser();
+    const result = await ingestNote(user.id, content);
     revalidatePath("/", "layout");
     return { ok: true, data: result };
   } catch (err) {
@@ -51,7 +46,8 @@ export async function renamePersonAction(formData: FormData): Promise<void> {
   const name = String(formData.get("name") ?? "").trim();
   if (!id || !name) return;
   await ensureSchema();
-  await renamePerson(id, name);
+  const user = await requireUser();
+  await renamePerson(user.id, id, name);
   revalidatePath(`/people/${id}`);
   revalidatePath("/people");
 }
@@ -60,7 +56,8 @@ export async function deletePersonAction(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
   await ensureSchema();
-  await deletePersonRepo(id);
+  const user = await requireUser();
+  await deletePersonRepo(user.id, id);
   revalidatePath("/people");
   revalidatePath("/graph");
   redirect("/people");
@@ -71,7 +68,8 @@ export async function deleteAttributeAction(formData: FormData): Promise<void> {
   const personId = String(formData.get("person_id") ?? "");
   if (!id) return;
   await ensureSchema();
-  await deleteAttributeRepo(id);
+  const user = await requireUser();
+  await deleteAttributeRepo(user.id, id);
   if (personId) revalidatePath(`/people/${personId}`);
 }
 
@@ -82,7 +80,8 @@ export async function deleteRelationshipAction(
   const personId = String(formData.get("person_id") ?? "");
   if (!id) return;
   await ensureSchema();
-  await deleteRelationshipRepo(id);
+  const user = await requireUser();
+  await deleteRelationshipRepo(user.id, id);
   if (personId) revalidatePath(`/people/${personId}`);
   revalidatePath("/graph");
 }
@@ -103,7 +102,8 @@ export async function enrichAction(
   if (!personId) return { ok: false, error: "person_id is required" };
   try {
     await ensureSchema();
-    const data = await enrichPersonById(personId, query || undefined);
+    const user = await requireUser();
+    const data = await enrichPersonById(user.id, personId, query || undefined);
     revalidatePath(`/people/${personId}`);
     return { ok: true, data };
   } catch (err) {
@@ -123,7 +123,8 @@ export async function askAction(
   if (!question) return { ok: false, error: "Question is empty." };
   try {
     await ensureSchema();
-    const { answer } = await askGraph(question);
+    const user = await requireUser();
+    const { answer } = await askGraph(user.id, question);
     return { ok: true, question, answer };
   } catch (err) {
     return { ok: false, error: (err as Error).message };

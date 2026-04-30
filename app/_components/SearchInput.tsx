@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Loader2, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
 interface Props {
   initialValue: string;
@@ -33,16 +35,18 @@ export function SearchInput({ initialValue }: Props) {
   }, [value]);
 
   return (
-    <div className="mb-5 flex gap-2.5">
-      <input
+    <div className="relative mb-5">
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <Input
         autoFocus
-        className="input flex-1"
-        style={{ fontSize: 15, padding: "14px 16px" }}
+        className="h-11 pl-9 pr-10 text-base"
         placeholder="e.g. TCS, climbing, doctor, disciplined…"
         value={value}
         onChange={(e) => setValue(e.target.value)}
       />
-      {isPending && <span className="spinner" style={{ alignSelf: "center" }} />}
+      {isPending && (
+        <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+      )}
     </div>
   );
 }

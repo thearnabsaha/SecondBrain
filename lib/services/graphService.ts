@@ -24,11 +24,11 @@ export interface GraphPayload {
   edges: GraphEdge[];
 }
 
-export async function buildGraph(): Promise<GraphPayload> {
-  const people = await listPeople();
+export async function buildGraph(userId: string): Promise<GraphPayload> {
+  const people = await listPeople(userId);
   const nodes: GraphNode[] = await Promise.all(
     people.map(async (p) => {
-      const attrs = await getActiveAttributes(p.id);
+      const attrs = await getActiveAttributes(userId, p.id);
       const headline =
         attrs.find((a) => a.category === "professional")?.value ??
         attrs.find((a) => a.category === "context")?.value ??
@@ -44,7 +44,7 @@ export async function buildGraph(): Promise<GraphPayload> {
 
   const seen = new Set<string>();
   const edges: GraphEdge[] = [];
-  const all = await getAllRelationships();
+  const all = await getAllRelationships(userId);
   for (const r of all) {
     const key = [r.from_person_id, r.to_person_id, r.type].sort().join("|");
     if (seen.has(key)) continue;

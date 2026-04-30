@@ -3,26 +3,31 @@ import { sql } from "../db/index";
 import type { Attribute, AttributeCategory } from "../types";
 
 export async function getAttributesForPerson(
+  userId: string,
   personId: string,
 ): Promise<Attribute[]> {
   return (await sql`
     SELECT * FROM attributes
-     WHERE person_id = ${personId}
+     WHERE user_id = ${userId} AND person_id = ${personId}
      ORDER BY (superseded_by IS NULL) DESC, updated_at DESC
   `) as Attribute[];
 }
 
 export async function getActiveAttributes(
+  userId: string,
   personId: string,
 ): Promise<Attribute[]> {
   return (await sql`
     SELECT * FROM attributes
-     WHERE person_id = ${personId} AND superseded_by IS NULL
+     WHERE user_id = ${userId}
+       AND person_id = ${personId}
+       AND superseded_by IS NULL
      ORDER BY updated_at DESC
   `) as Attribute[];
 }
 
 export interface UpsertAttributeInput {
+  userId: string;
   personId: string;
   category: AttributeCategory;
   key: string;
@@ -31,19 +36,13 @@ export interface UpsertAttributeInput {
   sourceNoteId: string | null;
 }
 
-/**
- * Smart upsert that preserves history.
- * - Same (person, category, key, value) active row -> bump confidence.
- * - Different value for same (person, category, key) -> mark old as superseded
- *   and insert the new one.
- * - Otherwise insert fresh.
- */
 export async function upsertAttribute(
   input: UpsertAttributeInput,
 ): Promise<{ added: boolean; attribute: Attribute }> {
   const sameRows = (await sql`
     SELECT * FROM attributes
-     WHERE person_id = ${input.personId}
+     WHERE user_id   = ${input.userId}
+       AND person_id = ${input.personId}
        AND category  = ${input.category}
        AND key       = ${input.key}
        AND value     = ${input.value}
@@ -69,7 +68,8 @@ export async function upsertAttribute(
 
   const conflicting = (await sql`
     SELECT * FROM attributes
-     WHERE person_id = ${input.personId}
+     WHERE user_id   = ${input.userId}
+       AND person_id = ${input.personId}
        AND category  = ${input.category}
        AND key       = ${input.key}
        AND superseded_by IS NULL
@@ -77,9 +77,9 @@ export async function upsertAttribute(
 
   await sql`
     INSERT INTO attributes
-      (id, person_id, category, key, value, confidence, source_note_id)
+      (id, user_id, person_id, category, key, value, confidence, source_note_id)
     VALUES
-      (${id}, ${input.personId}, ${input.category}, ${input.key},
+      (${id}, ${input.userId}, ${input.personId}, ${input.category}, ${input.key},
        ${input.value}, ${input.confidence}, ${input.sourceNoteId})
   `;
 
@@ -93,17 +93,24 @@ export async function upsertAttribute(
   return { added: true, attribute: created[0] };
 }
 
-export async function searchAttributes(query: string): Promise<Attribute[]> {
+export async function searchAttributes(
+  userId: string,
+  query: string,
+): Promise<Attribute[]> {
   const like = `%${query.toLowerCase()}%`;
   return (await sql`
     SELECT * FROM attributes
-     WHERE superseded_by IS NULL
+     WHERE user_id = ${userId}
+       AND superseded_by IS NULL
        AND (LOWER(value) LIKE ${like} OR LOWER(key) LIKE ${like})
      ORDER BY confidence DESC, updated_at DESC
      LIMIT 200
   `) as Attribute[];
 }
 
-export async function deleteAttribute(id: string): Promise<void> {
-  await sql`DELETE FROM attributes WHERE id = ${id}`;
+export async function deleteAttribute(
+  userId: string,
+  id: string,
+): Promise<void> {
+  await sql`DELETE FROM attributes WHERE id = ${id} AND user_id = ${userId}`;
 }

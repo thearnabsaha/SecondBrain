@@ -1,12 +1,21 @@
 /* eslint-disable no-console */
-import "dotenv/config";
-import { applySchema } from "../lib/db/schema";
-import { hasPostgres } from "../lib/config";
+import { config as loadEnv } from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Load env BEFORE importing anything that touches process.env.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(__dirname, "..");
+loadEnv({ path: path.join(root, ".env.local") });
+loadEnv({ path: path.join(root, ".env") });
 
 async function main() {
+  const { applySchema } = await import("../lib/db/schema");
+  const { hasPostgres } = await import("../lib/config");
+
   if (!hasPostgres()) {
     console.error(
-      "POSTGRES_URL is not set. Add it to .env (or run `vercel env pull .env`).",
+      "POSTGRES_URL is not set. Add it to .env.local before running this.",
     );
     process.exit(1);
   }

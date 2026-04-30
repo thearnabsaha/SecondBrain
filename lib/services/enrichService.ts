@@ -19,17 +19,13 @@ export interface EnrichOutcome {
   sources: Array<{ title: string; url: string }>;
 }
 
-/**
- * Build a default search query from a person's existing attributes.
- * We focus on professional context (employer + role) since that's where
- * public info is most useful.
- */
 function defaultQuery(
   name: string,
   attrs: Awaited<ReturnType<typeof getActiveAttributes>>,
 ): string {
   const employer = attrs.find(
-    (a) => a.category === "professional" && /employer|company|workplace/i.test(a.key),
+    (a) =>
+      a.category === "professional" && /employer|company|workplace/i.test(a.key),
   )?.value;
   const role = attrs.find(
     (a) => a.category === "professional" && /role|title|job/i.test(a.key),
@@ -37,27 +33,18 @@ function defaultQuery(
   if (employer && role) return `${role} at ${employer}`;
   if (employer) return `${employer} company overview`;
   if (role) return role;
-  // Fall back to the name with a context tag; this is intentionally vague
-  // because we don't want to look up private individuals — only public roles.
   return `${name} public profile`;
 }
 
-/**
- * Enrich a person's profile from public web search.
- *
- * If the caller passes an explicit query (e.g. "TCS" or "AIIMS"), we use it.
- * Otherwise we derive a query from the person's professional attributes.
- * Newly-discovered facts are persisted as low-confidence attributes and the
- * summary is regenerated.
- */
 export async function enrichPersonById(
+  userId: string,
   personId: string,
   customQuery?: string,
 ): Promise<EnrichOutcome> {
-  const person = await getPersonById(personId);
+  const person = await getPersonById(userId, personId);
   if (!person) throw new Error("Person not found");
 
-  const existing = await getActiveAttributes(personId);
+  const existing = await getActiveAttributes(userId, personId);
   const query = customQuery?.trim() || defaultQuery(person.name, existing);
 
   const result = await enrichPerson({
@@ -69,6 +56,7 @@ export async function enrichPersonById(
   let added = 0;
   for (const attr of result.attributes) {
     const r = await upsertAttribute({
+      userId,
       personId,
       category: attr.category,
       key: attr.key,
@@ -80,12 +68,11 @@ export async function enrichPersonById(
   }
 
   if (added > 0) {
-    await touchPerson(personId);
-    // Regenerate summary so the UI reflects the new info.
+    await touchPerson(userId, personId);
     try {
-      const attrs = await getActiveAttributes(personId);
-      const rels = await getRelationshipsForPerson(personId);
-      const notes = await getNotesForPerson(personId, 10);
+      const attrs = await getActiveAttributes(userId, personId);
+      const rels = await getRelationshipsForPerson(userId, personId);
+      const notes = await getNotesForPerson(userId, personId, 10);
       const relationships = await Promise.all(
         rels.map(async (rel) => {
           const otherId =
@@ -93,7 +80,7 @@ export async function enrichPersonById(
               ? rel.to_person_id
               : rel.from_person_id;
           const direction = rel.from_person_id === personId ? "out" : "in";
-          const other = await getPersonById(otherId);
+          const other = await getPersonById(userId, otherId);
           return {
             rel,
             otherName: other?.name ?? "(unknown)",
@@ -107,7 +94,7 @@ export async function enrichPersonById(
         relationships,
         recentNotes: notes,
       });
-      await setSummary(personId, summary.trim());
+      await setSummary(userId, personId, summary.trim());
     } catch (err) {
       console.warn(
         `[enrich] summary refresh failed: ${(err as Error).message}`,

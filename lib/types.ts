@@ -1,5 +1,14 @@
+export interface User {
+  id: string;
+  email: string;
+  name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Person {
   id: string;
+  user_id: string;
   name: string;
   normalized_name: string;
   created_at: string;
@@ -8,6 +17,7 @@ export interface Person {
 
 export interface Attribute {
   id: string;
+  user_id: string;
   person_id: string;
   category: AttributeCategory;
   key: string;
@@ -33,6 +43,7 @@ export type AttributeCategory =
 
 export interface Relationship {
   id: string;
+  user_id: string;
   from_person_id: string;
   to_person_id: string;
   type: RelationshipType;
@@ -68,12 +79,14 @@ export type RelationshipType =
 
 export interface Note {
   id: string;
+  user_id: string;
   content: string;
   created_at: string;
 }
 
 export interface NoteMention {
   id: string;
+  user_id: string;
   note_id: string;
   person_id: string;
   mention_text: string | null;
@@ -81,6 +94,7 @@ export interface NoteMention {
 
 export interface Summary {
   person_id: string;
+  user_id: string;
   content: string;
   generated_at: string;
 }

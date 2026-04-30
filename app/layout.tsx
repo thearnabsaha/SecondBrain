@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
-import { Sidebar } from "@/components/Sidebar";
-import { HealthBanners } from "@/components/HealthBanners";
 
 const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-sans",
+  variable: "--font-inter",
   display: "swap",
 });
 
@@ -22,15 +21,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={inter.variable}>
-      <body>
-        <div className="grid min-h-screen grid-cols-[240px_1fr]">
-          <Sidebar />
-          <main className="mx-auto w-full max-w-[1280px] px-10 pb-20 pt-8">
-            <HealthBanners />
-            {children}
-          </main>
-        </div>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
+      <body className="antialiased">
+        {children}
+        <Toaster />
       </body>
     </html>
   );

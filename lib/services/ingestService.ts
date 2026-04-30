@@ -35,13 +35,14 @@ interface ResolvedPerson {
 }
 
 async function resolvePerson(
+  userId: string,
   name: string,
   cache: Map<string, ResolvedPerson>,
 ): Promise<ResolvedPerson> {
   const cached = cache.get(name);
   if (cached) return cached;
 
-  const existing = await findPersonByName(name);
+  const existing = await findPersonByName(userId, name);
   if (existing) {
     const entry: ResolvedPerson = {
       person: existing,
@@ -52,7 +53,7 @@ async function resolvePerson(
     return entry;
   }
 
-  const created = await createPerson(name);
+  const created = await createPerson(userId, name);
   const entry: ResolvedPerson = {
     person: created,
     isNew: true,
@@ -62,17 +63,16 @@ async function resolvePerson(
   return entry;
 }
 
-/**
- * Refresh a person's summary. Failures are swallowed so a flaky LLM call
- * doesn't break ingest.
- */
-async function refreshSummary(personId: string): Promise<void> {
+async function refreshSummary(
+  userId: string,
+  personId: string,
+): Promise<void> {
   try {
-    const person = await getPersonById(personId);
+    const person = await getPersonById(userId, personId);
     if (!person) return;
-    const attributes = await getActiveAttributes(personId);
-    const rels = await getRelationshipsForPerson(personId);
-    const notes = await getNotesForPerson(personId, 10);
+    const attributes = await getActiveAttributes(userId, personId);
+    const rels = await getRelationshipsForPerson(userId, personId);
+    const notes = await getNotesForPerson(userId, personId, 10);
 
     const relationships = await Promise.all(
       rels.map(async (rel) => {
@@ -81,7 +81,7 @@ async function refreshSummary(personId: string): Promise<void> {
             ? rel.to_person_id
             : rel.from_person_id;
         const direction = rel.from_person_id === personId ? "out" : "in";
-        const other = await getPersonById(otherId);
+        const other = await getPersonById(userId, otherId);
         return {
           rel,
           otherName: other?.name ?? "(unknown)",
@@ -96,7 +96,7 @@ async function refreshSummary(personId: string): Promise<void> {
       relationships,
       recentNotes: notes,
     });
-    await setSummary(personId, summary.trim());
+    await setSummary(userId, personId, summary.trim());
   } catch (err) {
     console.warn(
       `[summary] failed to regenerate for person ${personId}:`,
@@ -105,26 +105,18 @@ async function refreshSummary(personId: string): Promise<void> {
   }
 }
 
-/**
- * The main ingestion pipeline.
- * 1. Save the raw note.
- * 2. Ask the LLM to extract people, attributes, relationships.
- * 3. Resolve each name to an existing or new person (fuzzy matching).
- * 4. Merge attributes (preserving history).
- * 5. Upsert directed relationships (with reinforcement).
- * 6. Record mentions for the timeline.
- * 7. Regenerate summaries for affected people (sequentially in serverless
- *    so we don't get cut off mid-await; finalizes before the response).
- */
-export async function ingestNote(content: string): Promise<IngestResult> {
+export async function ingestNote(
+  userId: string,
+  content: string,
+): Promise<IngestResult> {
   const trimmed = content.trim();
   if (!trimmed) throw new Error("Note content is empty.");
 
-  const note = await createNote(trimmed);
+  const note = await createNote(userId, trimmed);
 
   let payload: ExtractionPayload;
   try {
-    const known = await listPeople();
+    const known = await listPeople(userId);
     payload = await extractFromNote(trimmed, known);
   } catch (err) {
     throw new Error(
@@ -136,18 +128,19 @@ export async function ingestNote(content: string): Promise<IngestResult> {
   const affected = new Set<string>();
 
   for (const ep of payload.people) {
-    const resolved = await resolvePerson(ep.name, cache);
+    const resolved = await resolvePerson(userId, ep.name, cache);
     affected.add(resolved.person.id);
-    await addMention(note.id, resolved.person.id, ep.name);
+    await addMention(userId, note.id, resolved.person.id, ep.name);
 
     for (const alias of ep.aliases ?? []) {
       if (alias && alias !== resolved.person.name) {
-        await addAlias(resolved.person.id, alias);
+        await addAlias(userId, resolved.person.id, alias);
       }
     }
 
     for (const attr of ep.attributes) {
       const result = await upsertAttribute({
+        userId,
         personId: resolved.person.id,
         category: attr.category,
         key: attr.key,
@@ -157,18 +150,19 @@ export async function ingestNote(content: string): Promise<IngestResult> {
       });
       if (result.added) resolved.attributesAdded++;
     }
-    await touchPerson(resolved.person.id);
+    await touchPerson(userId, resolved.person.id);
   }
 
   let relationshipsAdded = 0;
   let relationshipsReinforced = 0;
   for (const rel of payload.relationships) {
-    const from = await resolvePerson(rel.from, cache);
-    const to = await resolvePerson(rel.to, cache);
+    const from = await resolvePerson(userId, rel.from, cache);
+    const to = await resolvePerson(userId, rel.to, cache);
     affected.add(from.person.id);
     affected.add(to.person.id);
 
     const result = await upsertRelationship({
+      userId,
       fromId: from.person.id,
       toId: to.person.id,
       type: rel.type,
@@ -180,9 +174,9 @@ export async function ingestNote(content: string): Promise<IngestResult> {
     relationshipsReinforced += result.reinforced;
   }
 
-  // Regenerate summaries before responding so the UI sees fresh data.
-  // Limited concurrency keeps cold-start lambdas under their memory cap.
-  await Promise.all(Array.from(affected).map(refreshSummary));
+  await Promise.all(
+    Array.from(affected).map((pid) => refreshSummary(userId, pid)),
+  );
 
   return {
     note_id: note.id,

@@ -1,7 +1,18 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { Loader2, Sparkles } from "lucide-react";
 import { enrichAction, type EnrichActionResult } from "../actions";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface Props {
   personId: string;
@@ -16,85 +27,99 @@ export function EnrichPanel({ personId, personName }: Props) {
   >(enrichAction, null);
 
   return (
-    <form action={formAction} className="card">
-      <div className="mb-2.5 flex items-center justify-between gap-3">
-        <div className="card-title m-0">Web enrichment</div>
-        <span className="tag tag-accent">Tavily</span>
-      </div>
-      <p className="m-0 text-[12px] text-[var(--color-text-faint)]">
-        Pull public info about {personName}'s company, school, or role and
-        merge it as low-confidence attributes.
-      </p>
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+        <CardTitle className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4" /> Web enrichment
+        </CardTitle>
+        <Badge variant="outline">Tavily</Badge>
+      </CardHeader>
+      <CardContent>
+        <p className="text-xs text-muted-foreground">
+          Pull public info about {personName}&apos;s company, school, or role
+          and merge it as low-confidence attributes.
+        </p>
 
-      <input type="hidden" name="person_id" value={personId} />
-
-      <div className="mt-3.5 flex items-center gap-2">
-        <input
-          name="query"
-          className="input flex-1"
-          placeholder="Custom query (optional, e.g. 'TCS company')"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        <button type="submit" className="btn btn-primary" disabled={pending}>
-          {pending ? <span className="spinner" /> : null}
-          {pending ? "Searching…" : "Enrich"}
-        </button>
-      </div>
-
-      {state && !state.ok && (
-        <div className="error-banner mt-3">{state.error}</div>
-      )}
-
-      {state?.ok && (
-        <div className="mt-3.5">
-          <div className="text-[12px] text-[var(--color-text-faint)]">
-            Searched: <strong>"{state.data.query}"</strong> · {state.data.added}{" "}
-            new attribute{state.data.added === 1 ? "" : "s"} added
+        <form action={formAction} className="mt-3 space-y-3">
+          <input type="hidden" name="person_id" value={personId} />
+          <div className="flex items-center gap-2">
+            <Input
+              name="query"
+              placeholder="Custom query (optional, e.g. 'TCS company')"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              disabled={pending}
+              className="flex-1"
+            />
+            <Button type="submit" disabled={pending} size="sm">
+              {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+              {pending ? "Searching…" : "Enrich"}
+            </Button>
           </div>
-          {state.data.rationale && (
-            <p className="mt-2 text-[13px]">{state.data.rationale}</p>
+
+          {state && !state.ok && (
+            <Alert variant="destructive">
+              <AlertDescription>{state.error}</AlertDescription>
+            </Alert>
           )}
-          {state.data.attributes.length > 0 && (
-            <div className="mt-2 flex flex-col gap-1.5">
-              {state.data.attributes.map((a, i) => (
-                <div key={i} className="attribute-row">
-                  <span className="text-[13px] font-medium">
-                    [{a.category}] {a.key}
-                  </span>
-                  <span className="ml-2.5 flex-1 text-right text-[13px] text-[var(--color-text-dim)]">
-                    {a.value}
-                  </span>
-                  <div className="confidence-bar">
-                    <span style={{ width: `${a.confidence * 100}%` }} />
+
+          {state?.ok && (
+            <div className="space-y-2 pt-1">
+              <div className="text-xs text-muted-foreground">
+                Searched: <strong>&quot;{state.data.query}&quot;</strong> ·{" "}
+                {state.data.added} new attribute
+                {state.data.added === 1 ? "" : "s"} added
+              </div>
+              {state.data.rationale && (
+                <p className="text-sm">{state.data.rationale}</p>
+              )}
+              {state.data.attributes.length > 0 && (
+                <div className="space-y-1.5">
+                  {state.data.attributes.map((a, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-3 rounded-md border bg-muted/30 px-3 py-1.5"
+                    >
+                      <span className="text-sm font-medium">
+                        [{a.category}] {a.key}
+                      </span>
+                      <span className="ml-auto text-sm text-muted-foreground">
+                        {a.value}
+                      </span>
+                      <div className="confidence-bar">
+                        <span style={{ width: `${a.confidence * 100}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {state.data.sources.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-xs text-muted-foreground">Sources:</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {state.data.sources.slice(0, 3).map((s, i) => (
+                      <a
+                        key={i}
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Badge
+                          variant="secondary"
+                          className="font-normal hover:bg-accent"
+                        >
+                          {truncate(s.title || s.url, 40)}
+                        </Badge>
+                      </a>
+                    ))}
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
-          {state.data.sources.length > 0 && (
-            <div className="mt-2.5">
-              <div className="text-[11px] text-[var(--color-text-faint)]">
-                Sources:
-              </div>
-              <div className="mt-1 flex flex-wrap gap-1.5">
-                {state.data.sources.slice(0, 3).map((s, i) => (
-                  <a
-                    key={i}
-                    href={s.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="tag"
-                  >
-                    {truncate(s.title || s.url, 40)}
-                  </a>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </form>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
 

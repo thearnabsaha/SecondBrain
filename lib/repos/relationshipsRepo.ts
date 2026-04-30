@@ -27,6 +27,7 @@ const INVERSE_TYPE: Partial<Record<RelationshipType, RelationshipType>> = {
 };
 
 export interface UpsertRelationshipInput {
+  userId: string;
   fromId: string;
   toId: string;
   type: RelationshipType;
@@ -41,6 +42,7 @@ export interface UpsertRelationshipResult {
 }
 
 async function upsertOne(
+  userId: string,
   fromId: string,
   toId: string,
   type: RelationshipType,
@@ -50,7 +52,8 @@ async function upsertOne(
 ): Promise<{ added: boolean }> {
   const existing = (await sql`
     SELECT * FROM relationships
-     WHERE from_person_id = ${fromId}
+     WHERE user_id        = ${userId}
+       AND from_person_id = ${fromId}
        AND to_person_id   = ${toId}
        AND type           = ${type}
   `) as Relationship[];
@@ -68,9 +71,9 @@ async function upsertOne(
   }
   await sql`
     INSERT INTO relationships
-      (id, from_person_id, to_person_id, type, label, confidence, source_note_id)
+      (id, user_id, from_person_id, to_person_id, type, label, confidence, source_note_id)
     VALUES
-      (${nanoid(12)}, ${fromId}, ${toId}, ${type}, ${label}, ${confidence}, ${sourceNoteId})
+      (${nanoid(12)}, ${userId}, ${fromId}, ${toId}, ${type}, ${label}, ${confidence}, ${sourceNoteId})
   `;
   return { added: true };
 }
@@ -84,6 +87,7 @@ export async function upsertRelationship(
   let reinforced = 0;
 
   const primary = await upsertOne(
+    input.userId,
     input.fromId,
     input.toId,
     input.type,
@@ -95,6 +99,7 @@ export async function upsertRelationship(
 
   if (SYMMETRIC_TYPES.has(input.type)) {
     const r = await upsertOne(
+      input.userId,
       input.toId,
       input.fromId,
       input.type,
@@ -105,6 +110,7 @@ export async function upsertRelationship(
     r.added ? added++ : reinforced++;
   } else if (INVERSE_TYPE[input.type]) {
     const r = await upsertOne(
+      input.userId,
       input.toId,
       input.fromId,
       INVERSE_TYPE[input.type] as RelationshipType,
@@ -119,21 +125,30 @@ export async function upsertRelationship(
 }
 
 export async function getRelationshipsForPerson(
+  userId: string,
   personId: string,
 ): Promise<Relationship[]> {
   return (await sql`
     SELECT * FROM relationships
-     WHERE from_person_id = ${personId} OR to_person_id = ${personId}
+     WHERE user_id = ${userId}
+       AND (from_person_id = ${personId} OR to_person_id = ${personId})
      ORDER BY last_seen_at DESC
   `) as Relationship[];
 }
 
-export async function getAllRelationships(): Promise<Relationship[]> {
+export async function getAllRelationships(
+  userId: string,
+): Promise<Relationship[]> {
   return (await sql`
-    SELECT * FROM relationships ORDER BY last_seen_at DESC
+    SELECT * FROM relationships
+     WHERE user_id = ${userId}
+     ORDER BY last_seen_at DESC
   `) as Relationship[];
 }
 
-export async function deleteRelationship(id: string): Promise<void> {
-  await sql`DELETE FROM relationships WHERE id = ${id}`;
+export async function deleteRelationship(
+  userId: string,
+  id: string,
+): Promise<void> {
+  await sql`DELETE FROM relationships WHERE id = ${id} AND user_id = ${userId}`;
 }
