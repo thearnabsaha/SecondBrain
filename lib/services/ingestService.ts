@@ -1,5 +1,5 @@
 import { extractFromNote } from "../llm/extract";
-import { generateSummary } from "../llm/summarize";
+import { generateBullets, generateSummary } from "../llm/summarize";
 import {
   addAlias,
   createPerson,
@@ -90,13 +90,46 @@ async function refreshSummary(
       }),
     );
 
-    const summary = await generateSummary({
+    const input = {
       person,
       attributes,
       relationships,
       recentNotes: notes,
+    };
+    // Two independent LLM calls in parallel. Use allSettled so a flaky
+    // bullets call doesn't block the prose summary (or vice versa) — the
+    // user always sees *something* on the profile page.
+    const [proseRes, bulletsRes] = await Promise.allSettled([
+      generateSummary(input),
+      generateBullets(input),
+    ]);
+
+    if (proseRes.status === "rejected") {
+      console.warn(
+        `[summary] prose failed for person ${personId}: ${proseRes.reason?.message ?? proseRes.reason}`,
+      );
+      // Bullets without prose isn't a useful state — leave the existing
+      // summary alone so the user keeps the previous (working) view.
+      return;
+    }
+
+    let bulletsText: string | null = null;
+    if (bulletsRes.status === "fulfilled") {
+      // Empty array is a valid evidence-only outcome ("we have no
+      // qualifying facts"). Store NULL in that case so the UI shows a
+      // clean empty state instead of an empty string.
+      bulletsText =
+        bulletsRes.value.length > 0 ? bulletsRes.value.join("\n") : null;
+    } else {
+      console.warn(
+        `[summary] bullets failed for person ${personId}: ${bulletsRes.reason?.message ?? bulletsRes.reason}`,
+      );
+    }
+
+    await setSummary(userId, personId, {
+      content: proseRes.value.trim(),
+      bullets: bulletsText,
     });
-    await setSummary(userId, personId, summary.trim());
   } catch (err) {
     console.warn(
       `[summary] failed to regenerate for person ${personId}:`,

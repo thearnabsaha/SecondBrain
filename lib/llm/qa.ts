@@ -20,11 +20,12 @@ You will be given:
 - Relationships between people.
 - Raw notes the user has captured.
 
-Rules:
-- Answer ONLY using the provided context. If the answer is not in the context, say so plainly.
+Hard rules — non-negotiable:
+- Answer ONLY using the provided context. If the answer is not in the context, say so plainly: "I don't have that in your notes." Do not infer, do not guess, do not draw on outside knowledge (e.g. don't conclude a city from an employer name).
 - Be specific. Name names. Quote attributes when useful.
-- Keep answers concise (1-4 sentences) unless the question demands a list.
-- Never invent people or facts.`;
+- No hedging or softeners. Forbidden phrases: "seems to", "appears to", "likely", "probably", "may", "might", "perhaps", "presumably", "suggests", "based on the data".
+- Keep answers concise (1-4 sentences) unless the question explicitly demands a list.
+- Never invent people, attributes, relationships, or events.`;
 
 function summarizeContext(ctx: QaContext): string {
   const peopleBlock = ctx.people
@@ -70,7 +71,7 @@ ${summarizeContext(ctx)}
 Question: ${question}
 
 Answer:`,
-    temperature: 0.2,
+    temperature: 0,
     maxTokens: 700,
   });
 }

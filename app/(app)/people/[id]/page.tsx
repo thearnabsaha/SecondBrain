@@ -18,6 +18,7 @@ import {
   deleteRelationshipAction,
 } from "../../../actions";
 import { EnrichPanel } from "../../../_components/EnrichPanel";
+import { SummaryView } from "../../../_components/SummaryView";
 import {
   Card,
   CardContent,
@@ -139,14 +140,10 @@ export default async function ProfilePage({
               <CardTitle>Summary</CardTitle>
             </CardHeader>
             <CardContent>
-              {summary ? (
-                <p className="summary-text m-0">{summary.content}</p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Summary will appear here after the first ingest finishes
-                  processing.
-                </p>
-              )}
+              <SummaryView
+                prose={summary?.content ?? null}
+                bullets={summary?.bullets ?? null}
+              />
             </CardContent>
           </Card>
 

@@ -1,7 +1,7 @@
 import { enrichPerson } from "../llm/enrich";
 import { getActiveAttributes, upsertAttribute } from "../repos/attributesRepo";
 import { getPersonById, touchPerson } from "../repos/peopleRepo";
-import { generateSummary } from "../llm/summarize";
+import { generateBullets, generateSummary } from "../llm/summarize";
 import { getRelationshipsForPerson } from "../repos/relationshipsRepo";
 import { getNotesForPerson } from "../repos/notesRepo";
 import { setSummary } from "../repos/summariesRepo";
@@ -88,13 +88,41 @@ export async function enrichPersonById(
           };
         }),
       );
-      const summary = await generateSummary({
+      const input = {
         person,
         attributes: attrs,
         relationships,
         recentNotes: notes,
-      });
-      await setSummary(userId, personId, summary.trim());
+      };
+      // Same parallel-with-allSettled strategy as the ingest path: prose
+      // and bullets are independent so a bullets failure doesn't block
+      // saving an updated prose summary, and vice versa.
+      const [proseRes, bulletsRes] = await Promise.allSettled([
+        generateSummary(input),
+        generateBullets(input),
+      ]);
+      if (proseRes.status === "rejected") {
+        console.warn(
+          `[enrich] prose summary failed: ${proseRes.reason?.message ?? proseRes.reason}`,
+        );
+      } else {
+        // Empty array from generateBullets is a valid evidence-only outcome
+        // — store NULL so the UI shows a clean empty state instead of an
+        // empty string.
+        let bullets: string | null = null;
+        if (bulletsRes.status === "fulfilled") {
+          bullets =
+            bulletsRes.value.length > 0 ? bulletsRes.value.join("\n") : null;
+        } else {
+          console.warn(
+            `[enrich] bullets failed: ${bulletsRes.reason?.message ?? bulletsRes.reason}`,
+          );
+        }
+        await setSummary(userId, personId, {
+          content: proseRes.value.trim(),
+          bullets,
+        });
+      }
     } catch (err) {
       console.warn(
         `[enrich] summary refresh failed: ${(err as Error).message}`,

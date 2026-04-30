@@ -47,10 +47,51 @@
 }
 
 /*
- * Force dark theme by default. Pure flat colors, no gradients anywhere.
- * Subtle indigo accent for primary actions.
+ * Pure flat colors, no gradients anywhere. Subtle indigo accent for
+ * primary actions. Two palettes:
+ *   :root  -> light theme (default if no class on <html>)
+ *   .dark  -> dark theme (toggled by next-themes)
+ *
+ * Both palettes share the same accent hue so primary buttons / links
+ * feel consistent across themes.
  */
 :root {
+  --background: oklch(0.99 0.002 270);
+  --foreground: oklch(0.18 0.01 270);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.01 270);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.01 270);
+  --primary: oklch(0.55 0.18 280);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.96 0.005 270);
+  --secondary-foreground: oklch(0.22 0.01 270);
+  --muted: oklch(0.96 0.005 270);
+  --muted-foreground: oklch(0.45 0.012 270);
+  --accent: oklch(0.94 0.008 270);
+  --accent-foreground: oklch(0.22 0.01 270);
+  --destructive: oklch(0.58 0.22 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(0.18 0.01 270 / 10%);
+  --input: oklch(0.18 0.01 270 / 14%);
+  --ring: oklch(0.55 0.18 280 / 50%);
+  --chart-1: oklch(0.55 0.18 280);
+  --chart-2: oklch(0.6 0.14 200);
+  --chart-3: oklch(0.62 0.16 145);
+  --chart-4: oklch(0.7 0.13 80);
+  --chart-5: oklch(0.6 0.18 25);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.97 0.004 270);
+  --sidebar-foreground: oklch(0.22 0.01 270);
+  --sidebar-primary: oklch(0.55 0.18 280);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.93 0.008 270);
+  --sidebar-accent-foreground: oklch(0.22 0.01 270);
+  --sidebar-border: oklch(0.18 0.01 270 / 10%);
+  --sidebar-ring: oklch(0.55 0.18 280 / 50%);
+}
+
+.dark {
   --background: oklch(0.145 0.004 270);
   --foreground: oklch(0.96 0 0);
   --card: oklch(0.185 0.004 270);
@@ -75,7 +116,6 @@
   --chart-3: oklch(0.7 0.16 145);
   --chart-4: oklch(0.78 0.13 80);
   --chart-5: oklch(0.7 0.18 25);
-  --radius: 0.625rem;
   --sidebar: oklch(0.165 0.004 270);
   --sidebar-foreground: oklch(0.96 0 0);
   --sidebar-primary: oklch(0.62 0.17 280);

@@ -95,7 +95,15 @@ export interface NoteMention {
 export interface Summary {
   person_id: string;
   user_id: string;
+  /** Prose summary, 2-4 short paragraphs. Always present. */
   content: string;
+  /**
+   * Newline-separated bullet points (5-7 lines). Stored as a single TEXT
+   * column to avoid a second table; the UI splits on `\n`. Null for old
+   * rows generated before the Bullets feature shipped — the UI falls back
+   * to splitting `content` into sentences in that case.
+   */
+  bullets: string | null;
   generated_at: string;
 }
 

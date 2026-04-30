@@ -59,3 +59,69 @@ export async function createUser(
   `) as UserRow[];
   return rowToUser(rows[0]);
 }
+
+export async function updateUserProfile(
+  id: string,
+  patch: { name?: string | null; email?: string },
+): Promise<User | null> {
+  // Only update fields actually provided. Two separate UPDATEs is simpler
+  // than building a dynamic SQL string here.
+  if (patch.email !== undefined) {
+    await sql`
+      UPDATE users
+         SET email = ${patch.email.toLowerCase()},
+             updated_at = NOW()
+       WHERE id = ${id}
+    `;
+  }
+  if (patch.name !== undefined) {
+    await sql`
+      UPDATE users
+         SET name = ${patch.name},
+             updated_at = NOW()
+       WHERE id = ${id}
+    `;
+  }
+  return findUserById(id);
+}
+
+export async function updateUserPassword(
+  id: string,
+  passwordHash: string,
+): Promise<void> {
+  await sql`
+    UPDATE users
+       SET password_hash = ${passwordHash},
+           updated_at = NOW()
+     WHERE id = ${id}
+  `;
+}
+
+export async function getPasswordHash(id: string): Promise<string | null> {
+  const rows = (await sql`
+    SELECT password_hash FROM users WHERE id = ${id} LIMIT 1
+  `) as Array<{ password_hash: string }>;
+  return rows[0]?.password_hash ?? null;
+}
+
+/**
+ * Wipes all the user's graph data but keeps the account row itself.
+ * Each FK has ON DELETE CASCADE on user_id, but we want to keep the user
+ * row, so delete the dependent tables explicitly. Order doesn't strictly
+ * matter (FK cascades handle children) but we mirror it for safety.
+ *
+ * `summaries` is gone via people CASCADE; `note_mentions` via notes/people
+ * CASCADE; `attributes` and `relationships` via people CASCADE; aliases
+ * via people CASCADE. Notes are deleted directly.
+ */
+export async function wipeUserGraph(userId: string): Promise<void> {
+  await sql`DELETE FROM people WHERE user_id = ${userId}`;
+  await sql`DELETE FROM notes  WHERE user_id = ${userId}`;
+}
+
+/**
+ * Hard-delete the user. All owned tables cascade.
+ */
+export async function deleteUser(userId: string): Promise<void> {
+  await sql`DELETE FROM users WHERE id = ${userId}`;
+}

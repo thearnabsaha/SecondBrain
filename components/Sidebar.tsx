@@ -9,6 +9,7 @@ import {
   HelpCircle,
   Network,
   LogOut,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/Avatar";
@@ -28,6 +29,7 @@ const links = [
   { href: "/search", label: "Search", icon: Search },
   { href: "/ask", label: "Ask", icon: HelpCircle },
   { href: "/graph", label: "Graph", icon: Network },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 interface SidebarProps {
@@ -105,6 +107,10 @@ export function Sidebar({ user }: SidebarProps) {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem render={<Link href="/settings" />}>
+              <Settings className="mr-2 h-4 w-4" />
+              Settings
+            </DropdownMenuItem>
             <form action={signOutAction}>
               <DropdownMenuItem
                 render={

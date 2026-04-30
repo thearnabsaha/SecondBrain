@@ -141,4 +141,9 @@ export async function applySchema(): Promise<void> {
     )
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_summaries_user ON summaries(user_id)`;
+  // Bulleted view of the same person, generated alongside `content` so the
+  // profile page can offer a Bullets / Summary tab toggle without a second
+  // LLM call at render time. Nullable on purpose — older rows had no
+  // bullets, and the UI gracefully falls back to prose if missing.
+  await sql`ALTER TABLE summaries ADD COLUMN IF NOT EXISTS bullets TEXT`;
 }
