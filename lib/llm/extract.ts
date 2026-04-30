@@ -26,34 +26,128 @@ const PersonSchema = z.object({
   attributes: z.array(AttributeSchema).default([]),
 });
 
-const RelationshipSchema = z.object({
-  from: z.string().min(1),
-  to: z.string().min(1),
-  type: z.enum([
-    "friend",
-    "close_friend",
-    "acquaintance",
-    "romantic_partner",
-    "ex_partner",
-    "spouse",
-    "family",
-    "parent",
-    "child",
-    "sibling",
-    "colleague",
-    "manager",
-    "report",
-    "mentor",
-    "mentee",
-    "classmate",
-    "neighbor",
-    "roommate",
-    "knows",
-    "other",
-  ]),
-  label: z.string().optional(),
-  confidence: z.number().min(0).max(1),
-});
+const ALLOWED_RELATIONSHIP_TYPES = [
+  "friend",
+  "close_friend",
+  "acquaintance",
+  "romantic_partner",
+  "ex_partner",
+  "spouse",
+  "family",
+  "parent",
+  "child",
+  "sibling",
+  "colleague",
+  "manager",
+  "report",
+  "mentor",
+  "mentee",
+  "classmate",
+  "neighbor",
+  "roommate",
+  "knows",
+  "other",
+] as const;
+
+/**
+ * Models love to invent relationship types ("cousin", "uncle", "boss",
+ * "girlfriend", "best_friend", ...). Map common ones to the canonical enum
+ * and stash the original wording in `label` so we don't lose nuance.
+ */
+const RELATIONSHIP_ALIASES: Record<string, (typeof ALLOWED_RELATIONSHIP_TYPES)[number]> = {
+  cousin: "family",
+  aunt: "family",
+  uncle: "family",
+  niece: "family",
+  nephew: "family",
+  grandparent: "family",
+  grandfather: "family",
+  grandmother: "family",
+  grandchild: "family",
+  in_law: "family",
+  step_parent: "parent",
+  step_child: "child",
+  step_sibling: "sibling",
+  half_sibling: "sibling",
+  brother: "sibling",
+  sister: "sibling",
+  father: "parent",
+  mother: "parent",
+  son: "child",
+  daughter: "child",
+  husband: "spouse",
+  wife: "spouse",
+  partner: "romantic_partner",
+  girlfriend: "romantic_partner",
+  boyfriend: "romantic_partner",
+  fiance: "romantic_partner",
+  fiancee: "romantic_partner",
+  best_friend: "close_friend",
+  bff: "close_friend",
+  coworker: "colleague",
+  teammate: "colleague",
+  boss: "manager",
+  supervisor: "manager",
+  subordinate: "report",
+  direct_report: "report",
+  student: "mentee",
+  teacher: "mentor",
+  flatmate: "roommate",
+  housemate: "roommate",
+};
+
+interface CoercedRelationship {
+  type: (typeof ALLOWED_RELATIONSHIP_TYPES)[number];
+  /** original wording when we had to coerce, undefined when type was already canonical */
+  originalType?: string;
+}
+
+function coerceRelationship(rawType: unknown): CoercedRelationship {
+  const fallback = { type: "other" as const };
+  if (typeof rawType !== "string") return fallback;
+  const norm = rawType.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if ((ALLOWED_RELATIONSHIP_TYPES as readonly string[]).includes(norm)) {
+    return { type: norm as CoercedRelationship["type"] };
+  }
+  if (RELATIONSHIP_ALIASES[norm]) {
+    return { type: RELATIONSHIP_ALIASES[norm], originalType: norm };
+  }
+  return { type: "other", originalType: norm };
+}
+
+/**
+ * Pre-validation pass over a raw relationship object: replaces an off-enum
+ * `type` with the canonical mapping, and threads the original wording into
+ * `label` so the nuance ("cousin", "boss") isn't lost.
+ */
+function normalizeRawRelationship(input: unknown): unknown {
+  if (typeof input !== "object" || input === null) return input;
+  const rec = input as Record<string, unknown>;
+  const { type, originalType } = coerceRelationship(rec.type);
+  if (originalType) {
+    const existingLabel =
+      typeof rec.label === "string" && rec.label.trim().length > 0
+        ? rec.label
+        : "";
+    return {
+      ...rec,
+      type,
+      label: existingLabel || originalType.replace(/_/g, " "),
+    };
+  }
+  return { ...rec, type };
+}
+
+const RelationshipSchema = z.preprocess(
+  normalizeRawRelationship,
+  z.object({
+    from: z.string().min(1),
+    to: z.string().min(1),
+    type: z.enum(ALLOWED_RELATIONSHIP_TYPES),
+    label: z.string().optional(),
+    confidence: z.number().min(0).max(1),
+  }),
+);
 
 const PayloadSchema = z.object({
   people: z.array(PersonSchema).default([]),

@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Don't scan smoke-test HTML dumps for Tailwind class candidates. */
+@source not "../scripts/_smoke_out";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -128,6 +131,53 @@
     bottom: 14px;
     left: 14px;
     @apply text-xs text-muted-foreground bg-background/80 border rounded-md px-2.5 py-2 backdrop-blur pointer-events-none;
+  }
+
+  /* Multi-select dimension chips above the graph canvas. */
+  .zone-chips {
+    @apply flex flex-wrap items-center gap-2 px-3 py-2.5 border-b bg-background/60 backdrop-blur;
+  }
+  .zone-chips__label {
+    @apply text-[11px] uppercase tracking-wider text-muted-foreground mr-1;
+  }
+  .zone-chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border bg-muted/30 px-3 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground;
+  }
+  .zone-chip--active {
+    @apply bg-primary/15 border-primary/40 text-foreground hover:bg-primary/20;
+  }
+  .zone-chip--clear {
+    @apply ml-auto text-muted-foreground hover:text-destructive;
+  }
+  .zone-chip__count {
+    @apply rounded-full bg-foreground/10 px-1.5 py-px text-[10px] tabular-nums;
+  }
+
+  /* Zone legend overlay (top-right of the canvas). */
+  .zone-legend {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    max-width: 240px;
+    max-height: calc(100% - 28px);
+    overflow-y: auto;
+    @apply text-xs bg-background/80 border rounded-md px-2.5 py-2 backdrop-blur space-y-1.5;
+  }
+  .zone-legend__row {
+    @apply flex items-center gap-2;
+  }
+  .zone-legend__swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    border: 1px solid;
+    flex-shrink: 0;
+  }
+  .zone-legend__label {
+    @apply flex-1 truncate inline-flex items-center gap-2;
+  }
+  .zone-legend__count {
+    @apply text-[10px] text-muted-foreground tabular-nums;
   }
 
   .summary-text {

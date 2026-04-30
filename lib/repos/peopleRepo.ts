@@ -24,6 +24,48 @@ export async function getPersonById(
 }
 
 /**
+ * Batch counterpart of getPersonById. One round-trip for N ids.
+ * Caller-friendly: returns a Map<id, Person> so lookups are O(1) and missing
+ * ids are simply absent from the map.
+ */
+export async function getPeopleByIds(
+  userId: string,
+  ids: readonly string[],
+): Promise<Map<string, Person>> {
+  const out = new Map<string, Person>();
+  if (ids.length === 0) return out;
+  // De-dupe: callers commonly pass the same id multiple times.
+  const unique = Array.from(new Set(ids));
+  const rows = (await sql`
+    SELECT * FROM people
+     WHERE user_id = ${userId}
+       AND id = ANY(${unique})
+  `) as Person[];
+  for (const p of rows) out.set(p.id, p);
+  return out;
+}
+
+/**
+ * Cheap, one-query alias lookup: returns the person that has an alias
+ * exactly matching the (already-normalized) query string. Used by the
+ * search service hot path where we already have all people loaded in JS
+ * for the name match and only need a single round-trip for aliases.
+ */
+export async function findPersonByAlias(
+  userId: string,
+  normalizedAlias: string,
+): Promise<Person | undefined> {
+  if (!normalizedAlias) return undefined;
+  const rows = (await sql`
+    SELECT p.* FROM people p
+      JOIN person_aliases a ON a.person_id = p.id
+     WHERE p.user_id = ${userId} AND a.normalized_alias = ${normalizedAlias}
+     LIMIT 1
+  `) as Person[];
+  return rows[0];
+}
+
+/**
  * Fuzzy entity resolution within the user's own people only.
  *   1. Exact match on normalized name.
  *   2. Exact match on a known alias.

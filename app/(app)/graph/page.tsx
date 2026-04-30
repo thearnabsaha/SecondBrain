@@ -52,10 +52,15 @@ export default async function GraphPage() {
             </p>
           </div>
         ) : (
-          <GraphCanvas nodes={data.nodes} edges={data.edges} />
+          <GraphCanvas
+            nodes={data.nodes}
+            edges={data.edges}
+            zoneDimensions={data.zoneDimensions}
+          />
         )}
         <div className="graph-legend">
-          Click a node to open the profile · drag to rearrange
+          Click a node to open the profile · drag to rearrange · toggle zones
+          above
         </div>
       </div>
     </>

@@ -7,11 +7,8 @@ import {
   getAliases,
   getPersonById,
 } from "@/lib/repos/peopleRepo";
-import {
-  getActiveAttributes,
-  getAttributesForPerson,
-} from "@/lib/repos/attributesRepo";
-import { getRelationshipsForPerson } from "@/lib/repos/relationshipsRepo";
+import { getAttributesForPerson } from "@/lib/repos/attributesRepo";
+import { getRelationshipsForPersonWithOther } from "@/lib/repos/relationshipsRepo";
 import { getNotesForPerson } from "@/lib/repos/notesRepo";
 import { getSummary } from "@/lib/repos/summariesRepo";
 import { Avatar } from "@/components/Avatar";
@@ -67,36 +64,44 @@ export default async function ProfilePage({
 
   await ensureSchema();
   const user = await requireUser();
-  const person = await getPersonById(user.id, id);
+
+  // Fan out everything that doesn't depend on `person` in parallel — including
+  // `getPersonById` itself. Previously the page did three sequential phases
+  // (auth → person → batch → relationship-other lookup); now it's effectively
+  // two parallel rounds, halving wall-clock latency.
+  //
+  // `getRelationshipsForPersonWithOther` joins each relationship with the
+  // other participant's id+name in one query, killing the post-batch
+  // `getPeopleByIds` round-trip entirely.
+  //
+  // `getAttributesForPerson` returns active + superseded; we partition in JS
+  // instead of issuing a second `getActiveAttributes` query.
+  const [person, allAttrs, relsWithOther, notes, aliases, summary] =
+    await Promise.all([
+      getPersonById(user.id, id),
+      getAttributesForPerson(user.id, id),
+      getRelationshipsForPersonWithOther(user.id, id),
+      getNotesForPerson(user.id, id, 100),
+      getAliases(user.id, id),
+      getSummary(user.id, id),
+    ]);
+
   if (!person) notFound();
 
-  const [active, all, rels, notes, aliases, summary] = await Promise.all([
-    getActiveAttributes(user.id, id),
-    getAttributesForPerson(user.id, id),
-    getRelationshipsForPerson(user.id, id),
-    getNotesForPerson(user.id, id, 100),
-    getAliases(user.id, id),
-    getSummary(user.id, id),
-  ]);
+  const active = allAttrs.filter((a) => !a.superseded_by);
+  const history = allAttrs.filter((a) => a.superseded_by);
 
-  const hydratedRelationships = await Promise.all(
-    rels.map(async (rel) => {
-      const isOutgoing = rel.from_person_id === id;
-      const otherId = isOutgoing ? rel.to_person_id : rel.from_person_id;
-      const other = await getPersonById(user.id, otherId);
-      return {
-        ...rel,
-        direction: (isOutgoing ? "outgoing" : "incoming") as
-          | "outgoing"
-          | "incoming",
-        other: other
-          ? { id: other.id, name: other.name }
-          : { id: otherId, name: "(unknown)" },
-      };
-    }),
-  );
+  const hydratedRelationships = relsWithOther.map((rel) => {
+    const isOutgoing = rel.from_person_id === id;
+    return {
+      ...rel,
+      direction: (isOutgoing ? "outgoing" : "incoming") as
+        | "outgoing"
+        | "incoming",
+      other: { id: rel.other_id, name: rel.other_name ?? "(unknown)" },
+    };
+  });
 
-  const history = all.filter((a) => a.superseded_by);
   const grouped = groupByCategory(active);
 
   return (

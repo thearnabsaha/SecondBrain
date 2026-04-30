@@ -135,4 +135,14 @@ export interface IngestResult {
   }>;
   relationships_added: number;
   relationships_reinforced: number;
+  /**
+   * If extraction couldn't run (e.g. LLM unreachable), the raw note is still
+   * persisted but processing is deferred. UI surfaces this so the user can
+   * retry.
+   */
+  pending?: {
+    reason: string;
+    /** True when we suspect a corporate proxy / VPN block, not a real outage. */
+    suspectedNetworkBlock: boolean;
+  };
 }

@@ -119,9 +119,25 @@ export async function ingestNote(
     const known = await listPeople(userId);
     payload = await extractFromNote(trimmed, known);
   } catch (err) {
-    throw new Error(
-      `Extraction failed: ${(err as Error).message}. The note was saved but not processed.`,
+    // Don't throw: the note IS saved, we just couldn't process it. Surface
+    // a `pending` result so the UI can show "saved, retry needed" instead
+    // of losing the user's input.
+    const reason = (err as Error).message ?? String(err);
+    const suspectedNetworkBlock =
+      /All Groq models failed/i.test(reason) &&
+      /Connection error|fetch failed|ENOTFOUND|EAI_AGAIN|urlblock|blockpage|policy|denied|captive/i.test(
+        reason,
+      );
+    console.warn(
+      `[ingest] LLM extraction failed for note ${note.id}; saving as pending.`,
     );
+    return {
+      note_id: note.id,
+      people: [],
+      relationships_added: 0,
+      relationships_reinforced: 0,
+      pending: { reason, suspectedNetworkBlock },
+    };
   }
 
   const cache = new Map<string, ResolvedPerson>();
@@ -178,14 +194,32 @@ export async function ingestNote(
     Array.from(affected).map((pid) => refreshSummary(userId, pid)),
   );
 
+  // The resolve cache is keyed by the raw name string the LLM emitted, so
+  // multiple aliases for the same person ("Aarav", "aarav", "Aarav Sharma")
+  // produce multiple cache entries pointing at the same DB row. Collapse by
+  // person.id before returning so the UI sees each person exactly once.
+  const peopleById = new Map<
+    string,
+    { id: string; name: string; is_new: boolean; attributes_added: number }
+  >();
+  for (const r of cache.values()) {
+    const existing = peopleById.get(r.person.id);
+    if (existing) {
+      existing.attributes_added += r.attributesAdded;
+      existing.is_new = existing.is_new || r.isNew;
+    } else {
+      peopleById.set(r.person.id, {
+        id: r.person.id,
+        name: r.person.name,
+        is_new: r.isNew,
+        attributes_added: r.attributesAdded,
+      });
+    }
+  }
+
   return {
     note_id: note.id,
-    people: Array.from(cache.values()).map((r) => ({
-      id: r.person.id,
-      name: r.person.name,
-      is_new: r.isNew,
-      attributes_added: r.attributesAdded,
-    })),
+    people: Array.from(peopleById.values()),
     relationships_added: relationshipsAdded,
     relationships_reinforced: relationshipsReinforced,
   };

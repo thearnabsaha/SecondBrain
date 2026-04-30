@@ -26,6 +26,33 @@ export async function getActiveAttributes(
   `) as Attribute[];
 }
 
+/**
+ * Batched variant: one query for N people. Returns a Map<personId, Attribute[]>
+ * (people with no attributes are absent from the map; callers should treat
+ * missing keys as []). Used by graph/search to avoid N round-trips.
+ */
+export async function getActiveAttributesForPeople(
+  userId: string,
+  personIds: readonly string[],
+): Promise<Map<string, Attribute[]>> {
+  const out = new Map<string, Attribute[]>();
+  if (personIds.length === 0) return out;
+  const unique = Array.from(new Set(personIds));
+  const rows = (await sql`
+    SELECT * FROM attributes
+     WHERE user_id = ${userId}
+       AND person_id = ANY(${unique})
+       AND superseded_by IS NULL
+     ORDER BY updated_at DESC
+  `) as Attribute[];
+  for (const a of rows) {
+    const list = out.get(a.person_id);
+    if (list) list.push(a);
+    else out.set(a.person_id, [a]);
+  }
+  return out;
+}
+
 export interface UpsertAttributeInput {
   userId: string;
   personId: string;

@@ -31,7 +31,7 @@ export function CapturePanel({ examples }: Props) {
   >(ingestAction, null);
 
   useEffect(() => {
-    if (state?.ok) setContent("");
+    if (state?.ok && !state.data.pending) setContent("");
   }, [state]);
 
   return (
@@ -88,16 +88,72 @@ export function CapturePanel({ examples }: Props) {
               </Alert>
             )}
 
-            {state?.ok && (
+            {state?.ok && state.data.pending && (
+              <Alert>
+                <AlertDescription>
+                  <div className="space-y-2 text-sm">
+                    <div className="font-medium">
+                      Note saved — but the AI couldn't process it yet.
+                    </div>
+                    {state.data.pending.suspectedNetworkBlock ? (
+                      <div className="space-y-1.5 text-muted-foreground">
+                        <div>
+                          Looks like your network is blocking{" "}
+                          <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                            api.groq.com
+                          </code>{" "}
+                          (corporate proxy, VPN URL filter, or captive
+                          portal).
+                        </div>
+                        <div>To fix, try one of:</div>
+                        <ul className="ml-4 list-disc space-y-0.5">
+                          <li>
+                            switch to a personal hotspot or disconnect from
+                            your VPN, then click Capture again,
+                          </li>
+                          <li>
+                            run{" "}
+                            <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                              npm run llm:doctor
+                            </code>{" "}
+                            in the project to diagnose your network,
+                          </li>
+                          <li>
+                            or set{" "}
+                            <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                              HTTPS_PROXY
+                            </code>{" "}
+                            /{" "}
+                            <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                              GROQ_BASE_URL
+                            </code>{" "}
+                            in <code>.env.local</code> and restart the dev
+                            server.
+                          </li>
+                        </ul>
+                      </div>
+                    ) : (
+                      <div className="text-muted-foreground">
+                        {state.data.pending.reason
+                          .split("\n")[0]
+                          .slice(0, 200)}
+                      </div>
+                    )}
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {state?.ok && !state.data.pending && (
               <div className="space-y-3">
                 <Separator />
                 <div className="text-xs uppercase tracking-wider text-muted-foreground">
                   Last ingest
                 </div>
                 <div className="space-y-2">
-                  {state.data.people.map((p) => (
+                  {state.data.people.map((p, i) => (
                     <Link
-                      key={p.id}
+                      key={`${p.id}-${i}`}
                       href={`/people/${p.id}`}
                       className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-sm transition-colors hover:bg-muted"
                     >

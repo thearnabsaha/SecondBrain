@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { findUserById } from "../repos/usersRepo";
@@ -9,9 +10,11 @@ import { SESSION_CONFIG, verifySession } from "./session";
  * Returns the currently signed-in user, or null. Reads the session cookie,
  * verifies the JWT, and looks the user up in Postgres.
  *
- * Use this in server components, server actions, and route handlers.
+ * Wrapped in React's cache() so that within a single request the layout,
+ * the page, and any nested server component all share one DB hit + one JWT
+ * verify, instead of repeating the work each time.
  */
-export async function getCurrentUser(): Promise<User | null> {
+export const getCurrentUser = cache(async (): Promise<User | null> => {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_CONFIG.cookie)?.value;
   if (!token) return null;
@@ -20,7 +23,7 @@ export async function getCurrentUser(): Promise<User | null> {
   if (!payload) return null;
 
   return findUserById(payload.uid);
-}
+});
 
 /**
  * Same as getCurrentUser but redirects to /signin if not authenticated.

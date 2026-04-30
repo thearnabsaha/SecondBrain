@@ -71,6 +71,14 @@ export async function applySchema(): Promise<void> {
   await sql`CREATE INDEX IF NOT EXISTS idx_attributes_person ON attributes(person_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_attributes_key ON attributes(category, key)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_attributes_value ON attributes(value)`;
+  // Partial index used by the hot getActiveAttributes / getActiveAttributesForPeople
+  // path. Covers WHERE user_id = $1 AND person_id = $2 AND superseded_by IS NULL,
+  // which is most attribute reads. ~10x smaller than a full index.
+  await sql`
+    CREATE INDEX IF NOT EXISTS idx_attributes_active
+      ON attributes(user_id, person_id)
+      WHERE superseded_by IS NULL
+  `;
 
   await sql`
     CREATE TABLE IF NOT EXISTS relationships (
@@ -89,6 +97,11 @@ export async function applySchema(): Promise<void> {
   `;
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_relationships_unique ON relationships(user_id, from_person_id, to_person_id, type)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_relationships_user ON relationships(user_id)`;
+  // Composite (user_id, from_person_id) to support the
+  // `(user_id, from OR to)` lookup in getRelationshipsForPerson — the planner
+  // can BitmapOr this with the existing user+to index.
+  await sql`CREATE INDEX IF NOT EXISTS idx_relationships_user_from ON relationships(user_id, from_person_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_relationships_user_to ON relationships(user_id, to_person_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_relationships_to ON relationships(to_person_id)`;
 
   await sql`
@@ -103,6 +116,21 @@ export async function applySchema(): Promise<void> {
   await sql`CREATE INDEX IF NOT EXISTS idx_note_mentions_user ON note_mentions(user_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_note_mentions_person ON note_mentions(person_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_note_mentions_note ON note_mentions(note_id)`;
+  // One mention per (note, person). Without this, an extractor that resolves
+  // multiple alias-variants to the same person inserts a row per alias,
+  // multiplying timeline JOINs. Dedupe in-place first so the unique index
+  // can be created safely on existing data.
+  await sql`
+    DELETE FROM note_mentions a
+     USING note_mentions b
+     WHERE a.note_id = b.note_id
+       AND a.person_id = b.person_id
+       AND a.id > b.id
+  `;
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_note_mentions_unique
+      ON note_mentions(note_id, person_id)
+  `;
 
   await sql`
     CREATE TABLE IF NOT EXISTS summaries (

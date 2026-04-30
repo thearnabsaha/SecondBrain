@@ -136,6 +136,35 @@ export async function getRelationshipsForPerson(
   `) as Relationship[];
 }
 
+/**
+ * Same as getRelationshipsForPerson but joins each row with the *other*
+ * participant's id and name in a single query. Saves an N+1 (or even a
+ * follow-up batch query) on the profile page hot path.
+ */
+export interface RelationshipWithOther extends Relationship {
+  other_id: string;
+  other_name: string;
+}
+
+export async function getRelationshipsForPersonWithOther(
+  userId: string,
+  personId: string,
+): Promise<RelationshipWithOther[]> {
+  return (await sql`
+    SELECT r.*,
+           CASE WHEN r.from_person_id = ${personId}
+                THEN r.to_person_id ELSE r.from_person_id END AS other_id,
+           CASE WHEN r.from_person_id = ${personId}
+                THEN p_to.name ELSE p_from.name END AS other_name
+      FROM relationships r
+      LEFT JOIN people p_from ON p_from.id = r.from_person_id
+      LEFT JOIN people p_to   ON p_to.id   = r.to_person_id
+     WHERE r.user_id = ${userId}
+       AND (r.from_person_id = ${personId} OR r.to_person_id = ${personId})
+     ORDER BY r.last_seen_at DESC
+  `) as RelationshipWithOther[];
+}
+
 export async function getAllRelationships(
   userId: string,
 ): Promise<Relationship[]> {
