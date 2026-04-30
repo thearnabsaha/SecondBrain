@@ -34,7 +34,7 @@ Built with **shadcn/ui**, **Tailwind v4**, **Neon Postgres**, **Groq**, and **Ta
 - **shadcn/ui** with Base UI primitives, **Tailwind CSS v4** (CSS-first config), flat dark theme — no gradients
 - **Postgres** via [`@neondatabase/serverless`](https://www.npmjs.com/package/@neondatabase/serverless) — Neon recommended
 - **Auth**: bcryptjs (password hashing) + jose (JWT signing, edge-compatible for proxy)
-- **LLM**: Groq (`llama-3.3-70b-versatile` by default)
+- **LLM**: Groq, with a built-in **model fallback chain** — by default tries `openai/gpt-oss-120b` → `openai/gpt-oss-20b` → `openai/gpt-oss-safeguard-20b` → `llama-3.3-70b-versatile`, retrying each model up to 2x with backoff and skipping to the next on transport errors or malformed JSON
 - **Web search**: Tavily
 - **Visualization**: react-force-graph-2d
 - **Validation**: Zod for LLM output
@@ -111,13 +111,16 @@ Copy `.env.example` to `.env.local` and fill it in:
 
 ```bash
 GROQ_API_KEY=gsk_...                                         # required
-GROQ_MODEL=llama-3.3-70b-versatile                           # optional
+# GROQ_MODEL=                                                # optional, pins a single model (disables fallback)
+# GROQ_MODELS=openai/gpt-oss-120b,llama-3.3-70b-versatile    # optional, override the chain
 
 TAVILY_API_KEY=tvly-...                                      # optional, enables enrichment
 
 POSTGRES_URL=postgresql://user:pass@host/db?sslmode=require  # required
 AUTH_SECRET=<at least 32 chars>                              # required
 ```
+
+> **Model fallback**: by default the app tries `openai/gpt-oss-120b` first, then `openai/gpt-oss-20b`, `openai/gpt-oss-safeguard-20b`, and finally `llama-3.3-70b-versatile`. Each model is retried up to 2x with exponential backoff. If a model returns malformed JSON for ingestion or enrichment, the chain immediately advances to the next model. See `lib/llm/groq.ts` for the runner.
 
 Generate an `AUTH_SECRET`:
 

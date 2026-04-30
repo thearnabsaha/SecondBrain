@@ -138,26 +138,29 @@ export async function extractFromNote(
   note: string,
   knownPeople: Person[],
 ): Promise<ExtractionPayload> {
-  const raw = await chat({
+  return chat<ExtractionPayload>({
     system: SYSTEM_PROMPT,
     user: buildUserPrompt(note, knownPeople),
     json: true,
     temperature: 0.15,
     maxTokens: 1500,
+    /**
+     * Throwing here makes the runner skip to the next model in the fallback
+     * chain instead of failing ingest. So if `gpt-oss-120b` returns garbage
+     * JSON, we automatically retry on `gpt-oss-20b`, and so on.
+     */
+    validate: (raw) => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        throw new Error(`non-JSON output: ${raw.slice(0, 120)}`);
+      }
+      const result = PayloadSchema.safeParse(parsed);
+      if (!result.success) {
+        throw new Error(`schema validation: ${result.error.message}`);
+      }
+      return result.data as ExtractionPayload;
+    },
   });
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error(`LLM returned non-JSON output: ${raw.slice(0, 200)}`);
-  }
-
-  const result = PayloadSchema.safeParse(parsed);
-  if (!result.success) {
-    throw new Error(
-      `LLM output failed schema validation: ${result.error.message}`,
-    );
-  }
-  return result.data as ExtractionPayload;
 }

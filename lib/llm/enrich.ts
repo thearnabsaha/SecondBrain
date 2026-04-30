@@ -108,29 +108,36 @@ ${snippetBlock}
 
 Return JSON only.`;
 
-  const raw = await chat({
-    system: SYSTEM_PROMPT,
-    user: userPrompt,
-    json: true,
-    temperature: 0.2,
-    maxTokens: 800,
-  });
+  type ParsedPayload = z.infer<typeof PayloadSchema>;
 
-  let parsed: unknown;
+  let parsed: ParsedPayload;
   try {
-    parsed = JSON.parse(raw);
-  } catch {
+    parsed = await chat<ParsedPayload>({
+      system: SYSTEM_PROMPT,
+      user: userPrompt,
+      json: true,
+      temperature: 0.2,
+      maxTokens: 800,
+      validate: (raw) => {
+        let json: unknown;
+        try {
+          json = JSON.parse(raw);
+        } catch {
+          throw new Error(`non-JSON output: ${raw.slice(0, 120)}`);
+        }
+        const result = PayloadSchema.safeParse(json);
+        if (!result.success) {
+          throw new Error(`schema validation: ${result.error.message}`);
+        }
+        return result.data;
+      },
+    });
+  } catch (err) {
+    // Whole chain failed (every model produced bad JSON / errored). Surface
+    // the Tavily sources so the user still sees something useful.
     return {
       attributes: [],
-      rationale: "LLM returned non-JSON output for enrichment.",
-      sources: search.results.map((r) => ({ title: r.title, url: r.url })),
-    };
-  }
-  const result = PayloadSchema.safeParse(parsed);
-  if (!result.success) {
-    return {
-      attributes: [],
-      rationale: `Enrichment output failed validation: ${result.error.message}`,
+      rationale: `Enrichment failed: ${(err as Error).message}`,
       sources: search.results.map((r) => ({ title: r.title, url: r.url })),
     };
   }
@@ -142,7 +149,7 @@ Return JSON only.`;
         `${a.category}|${a.key.toLowerCase()}|${a.value.toLowerCase()}` as const,
     ),
   );
-  const novel = (result.data.attributes as ExtractedAttribute[]).filter(
+  const novel = (parsed.attributes as ExtractedAttribute[]).filter(
     (a) =>
       !existing.has(
         `${a.category as AttributeCategory}|${a.key.toLowerCase()}|${a.value.toLowerCase()}`,
@@ -151,7 +158,7 @@ Return JSON only.`;
 
   return {
     attributes: novel,
-    rationale: result.data.rationale ?? null,
+    rationale: parsed.rationale ?? null,
     sources: search.results.map((r) => ({ title: r.title, url: r.url })),
   };
 }
