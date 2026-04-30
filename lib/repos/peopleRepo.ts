@@ -181,3 +181,46 @@ export async function getAliases(
 export async function deletePerson(userId: string, id: string): Promise<void> {
   await sql`DELETE FROM people WHERE id = ${id} AND user_id = ${userId}`;
 }
+
+/**
+ * People who haven't been mentioned in any note for at least `sinceDays`
+ * days, ordered by stalest first. Excludes people created less than
+ * `sinceDays` days ago — they wouldn't be "stale" yet, just new.
+ *
+ * "Last mentioned" is the most recent created_at across all note_mentions
+ * for that person, falling back to the person's own created_at.
+ */
+export interface StalePerson {
+  id: string;
+  name: string;
+  last_mentioned_at: string;
+  days_stale: number;
+}
+
+export async function getStalePeople(
+  userId: string,
+  sinceDays = 30,
+  limit = 5,
+): Promise<StalePerson[]> {
+  // FLOOR((NOW() - last)/86400) gives integer days. We compare against
+  // sinceDays directly and ORDER BY the timestamp ascending so stalest
+  // bubbles up first.
+  const rows = (await sql`
+    SELECT
+      p.id,
+      p.name,
+      COALESCE(MAX(m.created_at), p.created_at) AS last_mentioned_at,
+      FLOOR(EXTRACT(EPOCH FROM (NOW() - COALESCE(MAX(m.created_at), p.created_at))) / 86400)::int AS days_stale
+    FROM people p
+    LEFT JOIN note_mentions nm ON nm.person_id = p.id AND nm.user_id = ${userId}
+    LEFT JOIN notes m ON m.id = nm.note_id
+    WHERE p.user_id = ${userId}
+      AND p.created_at < NOW() - (${sinceDays} || ' days')::interval
+    GROUP BY p.id, p.name, p.created_at
+    HAVING COALESCE(MAX(m.created_at), p.created_at)
+           < NOW() - (${sinceDays} || ' days')::interval
+    ORDER BY last_mentioned_at ASC
+    LIMIT ${limit}
+  `) as StalePerson[];
+  return rows;
+}

@@ -19,8 +19,14 @@ import {
 import {
   addMention,
   createNote,
+  getNoteById,
   getNotesForPerson,
 } from "../repos/notesRepo";
+import {
+  clearPending,
+  markRetried,
+  recordPending,
+} from "../repos/pendingNotesRepo";
 import { setSummary } from "../repos/summariesRepo";
 import type {
   ExtractionPayload,
@@ -138,15 +144,23 @@ async function refreshSummary(
   }
 }
 
-export async function ingestNote(
+/**
+ * Runs the LLM extraction + DB writes for a note that's already persisted
+ * in `notes`. Both `ingestNote` (first attempt) and `retryNote` (Inbox
+ * retry button) call into this so the pipeline lives in one place.
+ *
+ * Side effects on success:
+ *   - upserts people, attributes, relationships, mentions, summaries.
+ *   - clears any pending_notes row for this note.
+ *
+ * Side effects on failure:
+ *   - records a pending_notes row with the error reason and bumps attempts.
+ *   - returns an IngestResult with `pending` populated.
+ */
+async function processNote(
   userId: string,
-  content: string,
+  note: { id: string; content: string },
 ): Promise<IngestResult> {
-  const trimmed = content.trim();
-  if (!trimmed) throw new Error("Note content is empty.");
-
-  const note = await createNote(userId, trimmed);
-
   // Two distinct network calls: one to Neon (listPeople), one to Groq
   // (extractFromNote). Catching them in one try/catch made an earlier
   // version of this code blame Groq for transient Neon DNS failures —
@@ -161,6 +175,7 @@ export async function ingestNote(
     console.warn(
       `[ingest] DB unreachable while loading known people for note ${note.id}: ${reason}`,
     );
+    await safeRecordPending(userId, note.id, "db_unreachable", reason);
     return {
       note_id: note.id,
       people: [],
@@ -176,7 +191,7 @@ export async function ingestNote(
 
   let payload: ExtractionPayload;
   try {
-    payload = await extractFromNote(trimmed, known);
+    payload = await extractFromNote(note.content, known);
   } catch (err) {
     // Don't throw: the note IS saved, we just couldn't process it. Surface
     // a `pending` result so the UI can show "saved, retry needed" instead
@@ -194,6 +209,7 @@ export async function ingestNote(
     console.warn(
       `[ingest] LLM extraction failed for note ${note.id}; saving as pending. Reason:\n${reason}`,
     );
+    await safeRecordPending(userId, note.id, "llm_failed", reason);
     return {
       note_id: note.id,
       people: [],
@@ -261,6 +277,9 @@ export async function ingestNote(
     Array.from(affected).map((pid) => refreshSummary(userId, pid)),
   );
 
+  // Successful processing: clear any pending row from a previous failed attempt.
+  await safeClearPending(userId, note.id);
+
   // The resolve cache is keyed by the raw name string the LLM emitted, so
   // multiple aliases for the same person ("Aarav", "aarav", "Aarav Sharma")
   // produce multiple cache entries pointing at the same DB row. Collapse by
@@ -290,4 +309,63 @@ export async function ingestNote(
     relationships_added: relationshipsAdded,
     relationships_reinforced: relationshipsReinforced,
   };
+}
+
+export async function ingestNote(
+  userId: string,
+  content: string,
+): Promise<IngestResult> {
+  const trimmed = content.trim();
+  if (!trimmed) throw new Error("Note content is empty.");
+  const note = await createNote(userId, trimmed);
+  return processNote(userId, { id: note.id, content: trimmed });
+}
+
+/**
+ * Re-run extraction for an already-saved note. Used by the Inbox UI's
+ * Retry button. Throws if the note doesn't exist or doesn't belong to
+ * the user.
+ */
+export async function retryNote(
+  userId: string,
+  noteId: string,
+): Promise<IngestResult> {
+  const note = await getNoteById(userId, noteId);
+  if (!note) throw new Error("Note not found.");
+  await markRetried(userId, noteId);
+  return processNote(userId, { id: note.id, content: note.content });
+}
+
+/**
+ * Wrapped recordPending that swallows DB errors. We're already on the
+ * "DB unreachable" path when this is called, so a follow-up DB write is
+ * almost certain to fail too — and we don't want to mask the original
+ * error with a confusing secondary one.
+ */
+async function safeRecordPending(
+  userId: string,
+  noteId: string,
+  kind: "db_unreachable" | "llm_failed",
+  reason: string,
+): Promise<void> {
+  try {
+    await recordPending(userId, noteId, kind, reason);
+  } catch (err) {
+    console.warn(
+      `[ingest] failed to record pending row for ${noteId}: ${(err as Error).message}`,
+    );
+  }
+}
+
+async function safeClearPending(
+  userId: string,
+  noteId: string,
+): Promise<void> {
+  try {
+    await clearPending(userId, noteId);
+  } catch (err) {
+    console.warn(
+      `[ingest] failed to clear pending row for ${noteId}: ${(err as Error).message}`,
+    );
+  }
 }

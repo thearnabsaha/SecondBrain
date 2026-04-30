@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { ensureSchema } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
-import { ingestNote } from "@/lib/services/ingestService";
+import { ingestNote, retryNote } from "@/lib/services/ingestService";
 import { enrichPersonById } from "@/lib/services/enrichService";
 import { ask as askGraph } from "@/lib/services/qaService";
 import {
@@ -13,6 +13,8 @@ import {
 } from "@/lib/repos/peopleRepo";
 import { deleteAttribute as deleteAttributeRepo } from "@/lib/repos/attributesRepo";
 import { deleteRelationship as deleteRelationshipRepo } from "@/lib/repos/relationshipsRepo";
+import { sql } from "@/lib/db";
+import { clearPending } from "@/lib/repos/pendingNotesRepo";
 import type { IngestResult } from "@/lib/types";
 
 /**
@@ -109,6 +111,45 @@ export async function enrichAction(
   } catch (err) {
     return { ok: false, error: (err as Error).message };
   }
+}
+
+export type RetryPendingResult =
+  | { ok: true; data: IngestResult }
+  | { ok: false; error: string };
+
+export async function retryPendingAction(
+  _prev: RetryPendingResult | null,
+  formData: FormData,
+): Promise<RetryPendingResult> {
+  const noteId = String(formData.get("note_id") ?? "");
+  if (!noteId) return { ok: false, error: "note_id is required" };
+  try {
+    await ensureSchema();
+    const user = await requireUser();
+    const data = await retryNote(user.id, noteId);
+    revalidatePath("/", "layout");
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
+}
+
+/**
+ * Discards a pending note: deletes the underlying note row (cascade
+ * removes the pending_notes entry, mentions, etc.). User has explicitly
+ * decided this raw text isn't worth keeping.
+ */
+export async function discardPendingAction(formData: FormData): Promise<void> {
+  const noteId = String(formData.get("note_id") ?? "");
+  if (!noteId) return;
+  await ensureSchema();
+  const user = await requireUser();
+  // Belt-and-suspenders: cascade should handle this, but explicit clear
+  // makes intent obvious if someone later drops the FK.
+  await clearPending(user.id, noteId);
+  await sql`DELETE FROM notes WHERE id = ${noteId} AND user_id = ${user.id}`;
+  revalidatePath("/inbox");
+  revalidatePath("/", "layout");
 }
 
 export type AskActionResult =

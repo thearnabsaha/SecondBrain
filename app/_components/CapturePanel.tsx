@@ -2,8 +2,9 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Loader2 } from "lucide-react";
+import { Loader2, Mic, MicOff } from "lucide-react";
 import { ingestAction, type IngestActionResult } from "../actions";
+import { useVoiceInput } from "./useVoiceInput";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -30,9 +31,20 @@ export function CapturePanel({ examples }: Props) {
     FormData
   >(ingestAction, null);
 
+  const voice = useVoiceInput((finalChunk) => {
+    setContent((prev) => {
+      const sep = prev && !/\s$/.test(prev) ? " " : "";
+      return prev + sep + finalChunk.trim();
+    });
+  });
+
   useEffect(() => {
     if (state?.ok && !state.data.pending) setContent("");
   }, [state]);
+
+  const liveText = voice.interim
+    ? content + (content && !/\s$/.test(content) ? " " : "") + voice.interim
+    : content;
 
   return (
     <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-[1.4fr_1fr]">
@@ -60,18 +72,48 @@ export function CapturePanel({ examples }: Props) {
                 id="content"
                 name="content"
                 placeholder="e.g. Met Aarav at the gym. Works at TCS, doesn't smoke. His girlfriend Maya is a doctor."
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
+                value={liveText}
+                onChange={(e) => {
+                  if (voice.listening) voice.stop();
+                  setContent(e.target.value);
+                }}
                 disabled={pending}
                 rows={6}
                 className="resize-y"
               />
             </div>
 
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-xs text-muted-foreground">
-                {content.length} chars · ⌘/Ctrl + Enter to submit
-              </span>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                {voice.supported && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={voice.listening ? "destructive" : "outline"}
+                    onClick={() =>
+                      voice.listening ? voice.stop() : voice.start()
+                    }
+                    disabled={pending}
+                    aria-pressed={voice.listening}
+                  >
+                    {voice.listening ? (
+                      <MicOff className="h-4 w-4" />
+                    ) : (
+                      <Mic className="h-4 w-4" />
+                    )}
+                    {voice.listening ? "Stop" : "Speak"}
+                  </Button>
+                )}
+                <span className="text-xs text-muted-foreground">
+                  {content.length} chars · ⌘/Ctrl + Enter to submit
+                  {voice.listening && (
+                    <span className="ml-2 inline-flex items-center gap-1 text-destructive">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-destructive" />
+                      listening
+                    </span>
+                  )}
+                </span>
+              </div>
               <Button
                 type="submit"
                 disabled={pending || !content.trim()}
@@ -81,6 +123,12 @@ export function CapturePanel({ examples }: Props) {
                 {pending ? "Thinking…" : "Capture"}
               </Button>
             </div>
+
+            {voice.error && (
+              <Alert variant="destructive">
+                <AlertDescription>{voice.error}</AlertDescription>
+              </Alert>
+            )}
 
             {state && !state.ok && (
               <Alert variant="destructive">

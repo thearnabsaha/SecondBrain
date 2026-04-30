@@ -10,6 +10,7 @@ import {
   Network,
   LogOut,
   Settings,
+  Inbox,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/Avatar";
@@ -23,8 +24,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { signOutAction } from "@/app/auth-actions";
 
-const links = [
+const links: Array<{
+  href: string;
+  label: string;
+  icon: typeof PenLine;
+  badgeKey?: "pending";
+}> = [
   { href: "/", label: "Capture", icon: PenLine },
+  { href: "/inbox", label: "Inbox", icon: Inbox, badgeKey: "pending" },
   { href: "/people", label: "People", icon: Users },
   { href: "/search", label: "Search", icon: Search },
   { href: "/ask", label: "Ask", icon: HelpCircle },
@@ -34,9 +41,10 @@ const links = [
 
 interface SidebarProps {
   user: { email: string; name: string | null };
+  pendingCount?: number;
 }
 
-export function Sidebar({ user }: SidebarProps) {
+export function Sidebar({ user, pendingCount = 0 }: SidebarProps) {
   const pathname = usePathname();
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -61,6 +69,10 @@ export function Sidebar({ user }: SidebarProps) {
         {links.map((l) => {
           const Icon = l.icon;
           const active = isActive(l.href);
+          const badge =
+            l.badgeKey === "pending" && pendingCount > 0
+              ? pendingCount
+              : null;
           return (
             <Link
               key={l.href}
@@ -73,13 +85,32 @@ export function Sidebar({ user }: SidebarProps) {
               )}
             >
               <Icon className="h-4 w-4" />
-              {l.label}
+              <span className="flex-1">{l.label}</span>
+              {badge !== null && (
+                <span
+                  className="rounded-full bg-destructive px-1.5 py-px text-[10px] font-semibold leading-none text-destructive-foreground"
+                  aria-label={`${badge} pending`}
+                >
+                  {badge > 99 ? "99+" : badge}
+                </span>
+              )}
             </Link>
           );
         })}
       </nav>
 
-      <div className="mt-auto">
+      <div className="mt-auto space-y-2">
+        <div className="px-2 text-[11px] text-muted-foreground">
+          Press{" "}
+          <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px]">
+            Ctrl
+          </kbd>{" "}
+          +{" "}
+          <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px]">
+            K
+          </kbd>{" "}
+          for quick capture
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger
             className="flex w-full items-center gap-3 rounded-md border bg-card p-2.5 text-left transition-colors hover:bg-accent"

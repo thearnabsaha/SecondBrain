@@ -1,7 +1,9 @@
+import { Download, FileJson, FileText } from "lucide-react";
 import { ensureSchema } from "@/lib/db";
 import { hasPostgres } from "@/lib/config";
 import { requireUser } from "@/lib/auth/current-user";
 import { listPeople } from "@/lib/repos/peopleRepo";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeToggle } from "@/app/_components/ThemeToggle";
 import { ProfileForm } from "@/app/_components/ProfileForm";
@@ -44,6 +46,42 @@ export default async function SettingsPage() {
           </CardHeader>
           <CardContent>
             <ProfileForm user={{ name: user.name, email: user.email }} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Export your data</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Download everything: people, attributes, relationships,
+              notes, and summaries. Use the JSON for backups or future
+              imports; use Markdown to read offline or paste into a notes
+              app.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <a
+                href="/api/export?format=json"
+                download
+                className={buttonVariants({ variant: "outline" })}
+              >
+                <FileJson className="h-4 w-4" />
+                Download JSON
+              </a>
+              <a
+                href="/api/export?format=md"
+                download
+                className={buttonVariants({ variant: "outline" })}
+              >
+                <FileText className="h-4 w-4" />
+                Download Markdown
+              </a>
+              <span className="inline-flex items-center text-[11px] text-muted-foreground">
+                <Download className="mr-1 h-3 w-3" />
+                Files are generated on demand and not cached.
+              </span>
+            </div>
           </CardContent>
         </Card>
 

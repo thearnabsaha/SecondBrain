@@ -133,6 +133,18 @@ export interface ExtractedRelationship {
   confidence: number;
 }
 
+export type PendingNoteKind = "db_unreachable" | "llm_failed";
+
+export interface PendingNote {
+  note_id: string;
+  user_id: string;
+  kind: PendingNoteKind;
+  reason: string;
+  attempts: number;
+  created_at: string;
+  retried_at: string | null;
+}
+
 export interface IngestResult {
   note_id: string;
   people: Array<{

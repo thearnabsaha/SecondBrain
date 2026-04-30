@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Trash2, X } from "lucide-react";
+import { Trash2, X, Quote } from "lucide-react";
 import { ensureSchema } from "@/lib/db";
 import { requireUser } from "@/lib/auth/current-user";
 import {
@@ -105,6 +105,11 @@ export default async function ProfilePage({
 
   const grouped = groupByCategory(active);
 
+  // Source-note lookup for citations. We only cite notes that are in the
+  // currently-loaded timeline (limit 100) so the link can scroll to a real
+  // anchor on the page; out-of-window citations are silently dropped.
+  const noteById = new Map(notes.map((n) => [n.id, n]));
+
   return (
     <>
       <div className="flex items-center gap-4">
@@ -174,6 +179,10 @@ export default async function ProfilePage({
                           <span className="ml-2 flex-1 text-right text-sm text-muted-foreground">
                             {a.value}
                           </span>
+                          <Cite
+                            noteId={a.source_note_id}
+                            noteById={noteById}
+                          />
                           <div
                             className="confidence-bar"
                             title={`confidence ${(a.confidence * 100).toFixed(0)}%`}
@@ -266,6 +275,10 @@ export default async function ProfilePage({
                           </div>
                         </div>
                       </Link>
+                      <Cite
+                        noteId={r.source_note_id}
+                        noteById={noteById}
+                      />
                       <form action={deleteRelationshipAction}>
                         <input type="hidden" name="id" value={r.id} />
                         <input
@@ -300,7 +313,11 @@ export default async function ProfilePage({
               ) : (
                 <div className="space-y-2.5">
                   {notes.map((n) => (
-                    <div key={n.id} className="timeline-item">
+                    <div
+                      key={n.id}
+                      id={`note-${n.id}`}
+                      className="timeline-item scroll-mt-24 target:bg-primary/10"
+                    >
                       <span className="mb-1 block text-[11px] text-muted-foreground">
                         {formatDate(n.created_at)}
                       </span>
@@ -332,4 +349,47 @@ function formatDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString();
+}
+
+/**
+ * Tiny "from note" link rendered next to each fact. Links to the timeline
+ * anchor on the same page so the user can verify the source. If the
+ * source note isn't in the visible timeline window (rare — only if the
+ * note that introduced the fact is older than the limit), shows a dimmed
+ * non-clickable indicator instead of a broken link.
+ *
+ * Server-rendered: takes a Map<noteId, Note> built once from `notes`.
+ */
+function Cite({
+  noteId,
+  noteById,
+}: {
+  noteId: string | null;
+  noteById: Map<string, { id: string; content: string; created_at: string }>;
+}) {
+  if (!noteId) return null;
+  const note = noteById.get(noteId);
+  if (!note) {
+    return (
+      <span
+        className="inline-flex items-center text-muted-foreground/40"
+        title="From an older note (not shown in timeline)"
+        aria-label="Source note not visible"
+      >
+        <Quote className="h-3 w-3" />
+      </span>
+    );
+  }
+  const preview =
+    note.content.length > 90 ? `${note.content.slice(0, 90)}…` : note.content;
+  return (
+    <a
+      href={`#note-${note.id}`}
+      className="inline-flex items-center text-muted-foreground/60 transition-colors hover:text-foreground"
+      title={`From: ${preview}`}
+      aria-label="Jump to source note"
+    >
+      <Quote className="h-3 w-3" />
+    </a>
+  );
 }

@@ -146,4 +146,21 @@ export async function applySchema(): Promise<void> {
   // LLM call at render time. Nullable on purpose — older rows had no
   // bullets, and the UI gracefully falls back to prose if missing.
   await sql`ALTER TABLE summaries ADD COLUMN IF NOT EXISTS bullets TEXT`;
+
+  // Pending-notes queue. When ingest can't reach Postgres or Groq, the raw
+  // note is still saved to `notes`, and a row goes here so the user can
+  // see it in the Inbox and retry. Cascade on note deletion so discarding
+  // a pending note in the UI also wipes the queue row.
+  await sql`
+    CREATE TABLE IF NOT EXISTS pending_notes (
+      note_id    TEXT PRIMARY KEY REFERENCES notes(id) ON DELETE CASCADE,
+      user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind       TEXT NOT NULL,            -- 'db_unreachable' | 'llm_failed'
+      reason     TEXT NOT NULL,            -- raw error message for debugging
+      attempts   INTEGER NOT NULL DEFAULT 1,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      retried_at TIMESTAMPTZ
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_pending_notes_user ON pending_notes(user_id, created_at DESC)`;
 }
